@@ -1,5 +1,7 @@
 package com.xattribution.xalarm
 
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Handler
@@ -13,12 +15,16 @@ import kotlin.concurrent.thread
 
 class MainActivity : FlutterActivity() {
 
+    private var channel: MethodChannel? = null
+    private var previewPlayer: MediaPlayer? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(
+        channel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "xalarm/system_sounds",
-        ).setMethodCallHandler { call, result ->
+        )
+        channel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "list" -> result.success(listSystemSounds())
                 "copyToFile" -> {
@@ -31,10 +37,99 @@ class MainActivity : FlutterActivity() {
                         copySoundToFile(uri, destDir, title, result)
                     }
                 }
+                "preview" -> {
+                    val source = call.argument<String>("source")
+                    if (source == null) {
+                        result.error("bad_args", "source is required", null)
+                    } else {
+                        try {
+                            startPreview(source)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            stopPreview(notify = false)
+                            result.error("preview_failed", e.message, null)
+                        }
+                    }
+                }
+                "stopPreview" -> {
+                    stopPreview(notify = false)
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }
     }
+
+    override fun onPause() {
+        stopPreview(notify = true)
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        stopPreview(notify = false)
+        super.onDestroy()
+    }
+
+    // --- preview ---
+
+    /**
+     * Plays any sound source the app knows about: the 'system' default alarm
+     * sound, a bundled Flutter asset ("assets/…"), a content:// device sound,
+     * or an absolute file path. One preview at a time; completion is reported
+     * back to Dart so the UI can reset its play indicator.
+     */
+    private fun startPreview(source: String) {
+        stopPreview(notify = false)
+        val player = MediaPlayer()
+        player.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build(),
+        )
+        when {
+            source == "system" -> player.setDataSource(
+                this,
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+            )
+            source.startsWith("content://") ->
+                player.setDataSource(this, Uri.parse(source))
+            source.startsWith("assets/") -> {
+                val afd = assets.openFd("flutter_assets/$source")
+                afd.use {
+                    player.setDataSource(it.fileDescriptor, it.startOffset, it.length)
+                }
+            }
+            else -> player.setDataSource(source)
+        }
+        player.isLooping = false
+        player.setOnPreparedListener { it.start() }
+        player.setOnCompletionListener { stopPreview(notify = true) }
+        player.setOnErrorListener { _, _, _ ->
+            stopPreview(notify = true)
+            true
+        }
+        player.prepareAsync()
+        previewPlayer = player
+    }
+
+    private fun stopPreview(notify: Boolean) {
+        previewPlayer?.let { player ->
+            try {
+                if (player.isPlaying) player.stop()
+            } catch (_: Exception) {
+            }
+            player.release()
+        }
+        previewPlayer = null
+        if (notify) {
+            Handler(Looper.getMainLooper()).post {
+                channel?.invokeMethod("previewEnded", null)
+            }
+        }
+    }
+
+    // --- system sound catalogue ---
 
     /** All system alarm / ringtone / notification sounds as title+uri+kind. */
     private fun listSystemSounds(): List<Map<String, String>> {

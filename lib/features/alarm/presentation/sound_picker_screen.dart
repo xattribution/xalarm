@@ -21,6 +21,42 @@ class SoundPickerScreen extends ConsumerStatefulWidget {
 class _SoundPickerScreenState extends ConsumerState<SoundPickerScreen> {
   bool _busy = false;
 
+  /// The source currently being previewed (tone path / content URI), if any.
+  String? _previewing;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(systemSoundsProvider).onPreviewEnded = () {
+      if (mounted) setState(() => _previewing = null);
+    };
+  }
+
+  @override
+  void dispose() {
+    final sounds = ref.read(systemSoundsProvider);
+    sounds.onPreviewEnded = null;
+    sounds.stopPreview();
+    super.dispose();
+  }
+
+  Future<void> _togglePreview(String source) async {
+    final sounds = ref.read(systemSoundsProvider);
+    if (_previewing == source) {
+      setState(() => _previewing = null);
+      await sounds.stopPreview();
+    } else {
+      setState(() => _previewing = source);
+      await sounds.preview(source);
+    }
+  }
+
+  /// Pop with the chosen sound value, silencing any running preview first.
+  void _select(String value) {
+    ref.read(systemSoundsProvider).stopPreview();
+    Navigator.of(context).pop(value);
+  }
+
   // --- imports ---
 
   Future<void> _importFile() async {
@@ -105,7 +141,7 @@ class _SoundPickerScreenState extends ConsumerState<SoundPickerScreen> {
     try {
       final value = await action();
       ref.invalidate(userTonesProvider);
-      if (value != null && mounted) Navigator.of(context).pop(value);
+      if (value != null && mounted) _select(value);
     } catch (e) {
       _showError('$errorPrefix: $e');
     } finally {
@@ -167,7 +203,9 @@ class _SoundPickerScreenState extends ConsumerState<SoundPickerScreen> {
                           tone: tone,
                           selected: widget.current == tone.path,
                           favorite: true,
-                          onTap: () => Navigator.of(context).pop(tone.path),
+                          previewing: _previewing == tone.path,
+                          onTap: () => _select(tone.path),
+                          onPreview: () => _togglePreview(tone.path),
                           onFavorite: () => ref
                               .read(favoriteSoundsProvider.notifier)
                               .toggle(tone.path),
@@ -186,7 +224,9 @@ class _SoundPickerScreenState extends ConsumerState<SoundPickerScreen> {
                         tone: tone,
                         selected: widget.current == tone.path,
                         favorite: favorites.contains(tone.path),
-                        onTap: () => Navigator.of(context).pop(tone.path),
+                        previewing: _previewing == tone.path,
+                        onTap: () => _select(tone.path),
+                        onPreview: () => _togglePreview(tone.path),
                         onFavorite: () => ref
                             .read(favoriteSoundsProvider.notifier)
                             .toggle(tone.path),
@@ -204,7 +244,9 @@ class _SoundPickerScreenState extends ConsumerState<SoundPickerScreen> {
                         tone: tone,
                         selected: widget.current == tone.path,
                         favorite: favorites.contains(tone.path),
-                        onTap: () => Navigator.of(context).pop(tone.path),
+                        previewing: _previewing == tone.path,
+                        onTap: () => _select(tone.path),
+                        onPreview: () => _togglePreview(tone.path),
                         onFavorite: () => ref
                             .read(favoriteSoundsProvider.notifier)
                             .toggle(tone.path),
@@ -261,16 +303,39 @@ class _SoundPickerScreenState extends ConsumerState<SoundPickerScreen> {
                                 ListTile(
                                   dense: true,
                                   title: Text(sound.title),
-                                  trailing: IconButton(
-                                    tooltip: 'Copy to My sounds & favorite',
-                                    icon: Icon(
-                                      Icons.star_border,
-                                      size: 20,
-                                      color: context.mutedColor,
-                                    ),
-                                    onPressed: _busy
-                                        ? null
-                                        : () => _favoriteSystemSound(sound),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        tooltip: _previewing == sound.uri
+                                            ? 'Stop preview'
+                                            : 'Preview',
+                                        icon: Icon(
+                                          _previewing == sound.uri
+                                              ? Icons.stop_circle_outlined
+                                              : Icons.play_circle_outline,
+                                          size: 20,
+                                          color: _previewing == sound.uri
+                                              ? Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                              : context.mutedColor,
+                                        ),
+                                        onPressed: () =>
+                                            _togglePreview(sound.uri),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Copy to My sounds & favorite',
+                                        icon: Icon(
+                                          Icons.star_border,
+                                          size: 20,
+                                          color: context.mutedColor,
+                                        ),
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _favoriteSystemSound(sound),
+                                      ),
+                                    ],
                                   ),
                                   onTap: _busy
                                       ? null
@@ -310,14 +375,18 @@ class _ToneTile extends StatelessWidget {
     required this.tone,
     required this.selected,
     required this.favorite,
+    required this.previewing,
     required this.onTap,
+    required this.onPreview,
     required this.onFavorite,
     this.onDelete,
   });
   final RingtoneInfo tone;
   final bool selected;
   final bool favorite;
+  final bool previewing;
   final VoidCallback onTap;
+  final VoidCallback onPreview;
   final VoidCallback onFavorite;
   final VoidCallback? onDelete;
 
@@ -333,6 +402,17 @@ class _ToneTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          IconButton(
+            tooltip: previewing ? 'Stop preview' : 'Preview',
+            icon: Icon(
+              previewing
+                  ? Icons.stop_circle_outlined
+                  : Icons.play_circle_outline,
+              size: 20,
+              color: previewing ? scheme.primary : context.mutedColor,
+            ),
+            onPressed: onPreview,
+          ),
           IconButton(
             tooltip: favorite ? 'Remove favorite' : 'Favorite',
             icon: Icon(

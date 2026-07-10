@@ -17,9 +17,43 @@ class SystemSoundInfo {
 
 /// Bridge to the Android RingtoneManager (see MainActivity.kt). The alarm
 /// player needs real file paths, so picking a system sound copies it into
-/// the app's ringtone library once.
+/// the app's ringtone library once. Also drives the native MediaPlayer for
+/// in-picker sound previews.
 class SystemSounds {
   static const _channel = MethodChannel('xalarm/system_sounds');
+
+  SystemSounds() {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'previewEnded') {
+        onPreviewEnded?.call();
+      }
+    });
+  }
+
+  /// Set by the sound picker so it can reset its play indicator when a
+  /// preview finishes on its own (or is cut off by the OS).
+  VoidCallback? onPreviewEnded;
+
+  /// Preview any sound source: 'system', an asset path, a content:// URI,
+  /// or an absolute file path. A new preview replaces the previous one.
+  Future<void> preview(String source) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await _channel.invokeMethod('preview', {'source': source});
+    } on PlatformException catch (e) {
+      debugPrint('Preview failed: ${e.message}');
+      onPreviewEnded?.call();
+    }
+  }
+
+  Future<void> stopPreview() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await _channel.invokeMethod('stopPreview');
+    } on PlatformException {
+      // Already stopped — nothing to do.
+    }
+  }
 
   Future<List<SystemSoundInfo>> list() async {
     if (defaultTargetPlatform != TargetPlatform.android) return const [];
