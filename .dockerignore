@@ -1,0 +1,17 @@
+# Keep the Docker build context small — only what the APK build needs.
+.git
+.gitignore
+.dart_tool
+build
+**/build
+.idea
+*.iml
+.vscode
+
+# iOS isn't built in the container.
+ios
+
+# Deploy tooling itself (stage 2 copies deploy/ explicitly, keep that).
+update.sh
+docker-compose.yml
+README.md

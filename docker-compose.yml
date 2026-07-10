@@ -1,0 +1,12 @@
+services:
+  web:
+    build:
+      context: .
+      args:
+        BUILD_COMMIT: "${BUILD_COMMIT:-dev}"
+        BUILD_DATE: "${BUILD_DATE:-unknown}"
+    image: xalarm-web
+    container_name: xalarm-web
+    restart: unless-stopped
+    ports:
+      - "${XALARM_WEB_PORT:-49731}:80"

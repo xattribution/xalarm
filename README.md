@@ -82,6 +82,19 @@ exercise the wall-clock-stability guarantee:
 cd packages/recurrence_engine && TZ=America/New_York dart test
 ```
 
+## Self-hosting the APK (local-network test loop)
+
+A Linux server with Docker (+ Compose v2) and git can build and serve the APK
+with one command — Flutter/JDK/Android SDK all live inside the build image:
+
+```bash
+./update.sh                        # pull latest source → build APK in Docker → serve
+XALARM_WEB_PORT=50000 ./update.sh  # custom port (default 49731)
+```
+
+Then open `http://<server-ip>:49731` from any device on the LAN and download
+`xalarm.apk`. See `update.sh` for all `XALARM_*` overrides.
+
 ## Status
 
 **Milestone 1 (this build):** recurrence engine + full Alarm tab (list, add/edit
