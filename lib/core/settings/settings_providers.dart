@@ -48,6 +48,14 @@ class SettingsController extends AsyncNotifier<AppSettings> {
   Future<void> regenerateToken() async =>
       _update((state.value ?? const AppSettings()).copyWith(apiToken: _newToken()));
 
+  Future<void> setSyncUrl(String url) async {
+    final trimmed = url.trim();
+    await _update(
+      (state.value ?? const AppSettings())
+          .copyWith(syncUrl: trimmed.isEmpty ? kDefaultSyncUrl : trimmed),
+    );
+  }
+
   Future<void> setUpdateUrl(String url) async {
     final trimmed = url.trim().replaceAll(RegExp(r'/+$'), '');
     await _update(

@@ -2,25 +2,33 @@ import 'dart:async';
 
 import 'package:alarm/alarm.dart' as pkg;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sync_protocol/sync_protocol.dart';
 
 import '../../core/constants.dart';
+import '../sync/application/sync_controller.dart';
+import '../sync/sync_banner.dart';
 import 'zen_screen.dart';
 
 /// Countdown timer. The end-of-timer ring is scheduled as a one-shot native
 /// alarm, so it fires even if the app is backgrounded or the screen is off.
-class TimerScreen extends StatefulWidget {
+/// When a Time Sync session is active, start/pause/reset mirror to the
+/// partner's device — each phone still schedules its own native alarm, so
+/// the ring fires locally even if the connection hiccups at zero.
+class TimerScreen extends ConsumerStatefulWidget {
   const TimerScreen({super.key});
 
   @override
-  State<TimerScreen> createState() => _TimerScreenState();
+  ConsumerState<TimerScreen> createState() => _TimerScreenState();
 }
 
-class _TimerScreenState extends State<TimerScreen> {
+class _TimerScreenState extends ConsumerState<TimerScreen> {
   Duration _selected = const Duration(minutes: 10);
   DateTime? _endsAt; // non-null while running
   Duration _pausedRemaining = Duration.zero;
   bool _paused = false;
   Timer? _tick;
+  StreamSubscription<PeerAction>? _syncSub;
 
   bool get _running => _endsAt != null;
   bool get _idle => !_running && !_paused;
@@ -34,10 +42,57 @@ class _TimerScreenState extends State<TimerScreen> {
     return _selected;
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _syncSub =
+        ref.read(syncProvider.notifier).actions.listen(_onRemoteAction);
+  }
+
+  void _onRemoteAction(PeerAction pa) {
+    final sync = ref.read(syncProvider.notifier);
+    switch (pa.action) {
+      case TimerSet(:final durationMs):
+        if (_idle) {
+          setState(() => _selected = Duration(milliseconds: durationMs));
+        }
+      case TimerStart(:final endsAtServerMs, :final durationMs):
+        final endsAt = DateTime.fromMillisecondsSinceEpoch(
+          sync.toLocalMs(endsAtServerMs),
+        );
+        setState(() => _selected = Duration(milliseconds: durationMs));
+        _startAt(endsAt);
+      case TimerPause(:final remainingMs, :final durationMs):
+        _applyPause(
+          Duration(milliseconds: remainingMs),
+          Duration(milliseconds: durationMs),
+        );
+      case TimerReset(:final durationMs):
+        _applyReset(Duration(milliseconds: durationMs));
+      default:
+        return; // stopwatch actions belong to the Stopwatch tab
+    }
+  }
+
   Future<void> _start() async {
     final duration = _paused ? _pausedRemaining : _selected;
     if (duration.inSeconds < 1) return;
     final endsAt = DateTime.now().add(duration);
+    await _startAt(endsAt);
+
+    final sync = ref.read(syncProvider.notifier);
+    if (ref.read(syncProvider).isPaired) {
+      sync.sendAction(TimerStart(
+        endsAtServerMs: sync.clock.toServer(endsAt.millisecondsSinceEpoch),
+        durationMs: _selected.inMilliseconds,
+      ));
+    }
+  }
+
+  /// Schedule the native ring + run the countdown toward [endsAt].
+  /// Shared by local starts and remote (synced) starts.
+  Future<void> _startAt(DateTime endsAt) async {
+    if (endsAt.isBefore(DateTime.now())) return;
     try {
       await pkg.Alarm.set(
         alarmSettings: pkg.AlarmSettings(
@@ -79,10 +134,22 @@ class _TimerScreenState extends State<TimerScreen> {
 
   Future<void> _pause() async {
     final remaining = _remaining;
+    await _applyPause(remaining, _selected);
+    final sync = ref.read(syncProvider.notifier);
+    if (ref.read(syncProvider).isPaired) {
+      sync.sendAction(TimerPause(
+        remainingMs: remaining.inMilliseconds,
+        durationMs: _selected.inMilliseconds,
+      ));
+    }
+  }
+
+  Future<void> _applyPause(Duration remaining, Duration total) async {
     try {
       await pkg.Alarm.stop(kTimerNativeAlarmId);
     } catch (_) {}
     setState(() {
+      _selected = total;
       _pausedRemaining = remaining;
       _endsAt = null;
       _paused = true;
@@ -91,14 +158,34 @@ class _TimerScreenState extends State<TimerScreen> {
   }
 
   Future<void> _reset() async {
+    await _applyReset(_selected);
+    if (ref.read(syncProvider).isPaired) {
+      ref.read(syncProvider.notifier).sendAction(
+            TimerReset(durationMs: _selected.inMilliseconds),
+          );
+    }
+  }
+
+  Future<void> _applyReset(Duration total) async {
     try {
       await pkg.Alarm.stop(kTimerNativeAlarmId);
     } catch (_) {}
     setState(() {
+      _selected = total;
       _endsAt = null;
       _paused = false;
     });
     _stopTick();
+  }
+
+  /// Mirror duration tweaks made while idle so both parties see the same
+  /// setting before anyone presses start.
+  void _publishSet() {
+    if (_idle && ref.read(syncProvider).isPaired) {
+      ref.read(syncProvider.notifier).sendAction(
+            TimerSet(durationMs: _selected.inMilliseconds),
+          );
+    }
   }
 
   void _stopTick() {
@@ -108,6 +195,7 @@ class _TimerScreenState extends State<TimerScreen> {
 
   @override
   void dispose() {
+    _syncSub?.cancel();
     _stopTick();
     super.dispose();
   }
@@ -120,6 +208,7 @@ class _TimerScreenState extends State<TimerScreen> {
           ? const Duration(seconds: 1)
           : (next > const Duration(hours: 99) ? const Duration(hours: 99) : next);
     });
+    _publishSet();
   }
 
   static String _fmt(Duration d) {
@@ -142,6 +231,7 @@ class _TimerScreenState extends State<TimerScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
+          const SyncBanner(),
           Align(
             alignment: Alignment.topRight,
             child: Padding(
@@ -237,7 +327,10 @@ class _TimerScreenState extends State<TimerScreen> {
                           : '${preset.inHours}h',
                     ),
                     selected: _selected == preset,
-                    onSelected: (_) => setState(() => _selected = preset),
+                    onSelected: (_) {
+                      setState(() => _selected = preset);
+                      _publishSet();
+                    },
                   ),
               ],
             ),

@@ -57,6 +57,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _editSyncUrl(String current) async {
+    final controller = TextEditingController(text: current);
+    final url = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sync server'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(hintText: kDefaultSyncUrl),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (url != null) {
+      await ref.read(settingsProvider.notifier).setSyncUrl(url);
+    }
+  }
+
   Future<void> _editUpdateUrl(String current) async {
     final controller = TextEditingController(text: current);
     final url = await showDialog<String>(
@@ -212,6 +241,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ],
               ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          const _SectionLabel('Time Sync'),
+          _Panel(
+            child: ListTile(
+              title: const Text('Sync server'),
+              subtitle: Text(
+                settings.syncUrl,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12.5, color: context.mutedColor),
+              ),
+              trailing: Icon(Icons.edit_outlined,
+                  size: 18, color: context.mutedColor),
+              onTap: () => _editSyncUrl(settings.syncUrl),
             ),
           ),
           const SizedBox(height: 24),

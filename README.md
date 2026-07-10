@@ -95,6 +95,16 @@ XALARM_WEB_PORT=50000 ./update.sh  # custom port (default 49731)
 Then open `http://<server-ip>:49731` from any device on the LAN and download
 `xalarm.apk`. See `update.sh` for all `XALARM_*` overrides.
 
+## Time Sync (watch-party timer & stopwatch)
+
+Pair two phones with jackbox-style codes and share a live timer + stopwatch —
+either side can start/stop and both screens stay in lockstep via a tiny
+self-hosted relay (the `sync` service in docker-compose; in-memory only,
+nothing persisted). Pairing is mutual and explicit, a "Synced with <name>"
+banner shows while connected, and a dropped session must be reconnected by
+both sides within 5 seconds or it's purged. Setup:
+[docs/sync_server.md](docs/sync_server.md).
+
 ## Home Assistant
 
 The app can serve a token-authenticated REST API on your LAN so Home Assistant

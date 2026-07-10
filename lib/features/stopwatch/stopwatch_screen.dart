@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sync_protocol/sync_protocol.dart';
 
 import '../../core/data/json_file.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/widget_sync.dart';
+import '../sync/application/sync_controller.dart';
+import '../sync/sync_banner.dart';
 
 /// Stopwatch with laps. State is epoch-based and persisted, so it keeps
 /// counting across app restarts and feeds the home-screen widget.
@@ -32,10 +35,67 @@ class _StopwatchScreenState extends ConsumerState<StopwatchScreen> {
           ? Duration.zero
           : DateTime.now().difference(_runningSince!));
 
+  StreamSubscription<PeerAction>? _syncSub;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _syncSub =
+        ref.read(syncProvider.notifier).actions.listen(_onRemoteAction);
+  }
+
+  /// Apply an action performed by the sync partner. Timestamps arrive in
+  /// server time; the controller's clock converts to this device's clock.
+  void _onRemoteAction(PeerAction pa) {
+    final sync = ref.read(syncProvider.notifier);
+    switch (pa.action) {
+      case StopwatchStart(:final accumulatedMs, :final sinceServerMs):
+        setState(() {
+          _accumulated = Duration(milliseconds: accumulatedMs);
+          _runningSince = DateTime.fromMillisecondsSinceEpoch(
+            sync.toLocalMs(sinceServerMs),
+          );
+        });
+        _startTick();
+      case StopwatchPause(:final accumulatedMs):
+        setState(() {
+          _accumulated = Duration(milliseconds: accumulatedMs);
+          _runningSince = null;
+        });
+        _stopTick();
+      case StopwatchReset():
+        setState(() {
+          _accumulated = Duration.zero;
+          _runningSince = null;
+          _laps.clear();
+        });
+        _stopTick();
+      case StopwatchLap(:final atMs):
+        setState(() => _laps.add(Duration(milliseconds: atMs)));
+      default:
+        return; // timer actions are handled by the Timer tab
+    }
+    _persist();
+  }
+
+  /// Publish a local state change to the sync partner (no-op when unpaired).
+  void _publish() {
+    final sync = ref.read(syncProvider.notifier);
+    if (!ref.read(syncProvider).isPaired) return;
+    if (_runningSince != null) {
+      sync.sendAction(StopwatchStart(
+        accumulatedMs: _accumulated.inMilliseconds,
+        sinceServerMs:
+            sync.clock.toServer(_runningSince!.millisecondsSinceEpoch),
+      ));
+    } else if (_accumulated > Duration.zero) {
+      sync.sendAction(
+        StopwatchPause(accumulatedMs: _accumulated.inMilliseconds),
+      );
+    } else {
+      sync.sendAction(const StopwatchReset());
+    }
   }
 
   Future<void> _load() async {
@@ -88,12 +148,16 @@ class _StopwatchScreenState extends ConsumerState<StopwatchScreen> {
       }
     });
     _persist();
+    _publish();
   }
 
   void _lapOrReset() {
+    final wasRunning = _running;
+    late final Duration lapAt;
     setState(() {
       if (_running) {
-        _laps.add(_elapsed);
+        lapAt = _elapsed;
+        _laps.add(lapAt);
       } else {
         _accumulated = Duration.zero;
         _runningSince = null;
@@ -101,10 +165,19 @@ class _StopwatchScreenState extends ConsumerState<StopwatchScreen> {
       }
     });
     _persist();
+    if (ref.read(syncProvider).isPaired) {
+      final sync = ref.read(syncProvider.notifier);
+      if (wasRunning) {
+        sync.sendAction(StopwatchLap(atMs: lapAt.inMilliseconds));
+      } else {
+        sync.sendAction(const StopwatchReset());
+      }
+    }
   }
 
   @override
   void dispose() {
+    _syncSub?.cancel();
     _stopTick();
     super.dispose();
   }
@@ -127,6 +200,7 @@ class _StopwatchScreenState extends ConsumerState<StopwatchScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
+          const SyncBanner(),
           const Spacer(),
           Text(
             _fmt(elapsed),

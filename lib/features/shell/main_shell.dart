@@ -9,6 +9,7 @@ import '../clock/world_clock_add_screen.dart';
 import '../schedules/shift_schedules_screen.dart';
 import '../settings/settings_screen.dart';
 import '../stopwatch/stopwatch_screen.dart';
+import '../sync/sync_screen.dart';
 import '../timer/timer_screen.dart';
 
 /// The app shell: the four standard clock-app tabs. Features live on the tab
@@ -71,6 +72,14 @@ class _MainShellState extends ConsumerState<MainShell> {
                 MaterialPageRoute(
                   builder: (_) => const ShiftSchedulesScreen(),
                 ),
+              ),
+            ),
+          if (_index == 2 || _index == 3)
+            IconButton(
+              tooltip: 'Time Sync',
+              icon: const Icon(Icons.link),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SyncScreen()),
               ),
             ),
           IconButton(

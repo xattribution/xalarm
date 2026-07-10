@@ -10,3 +10,15 @@ services:
     restart: unless-stopped
     ports:
       - "${XALARM_WEB_PORT:-49731}:80"
+
+  # Time-sync relay (paired timer/stopwatch sessions). In-memory only —
+  # nothing is persisted; restart wipes all sessions by design.
+  sync:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: xalarm-sync
+    container_name: xalarm-sync
+    restart: unless-stopped
+    ports:
+      - "${XALARM_SYNC_PORT:-49732}:8080"

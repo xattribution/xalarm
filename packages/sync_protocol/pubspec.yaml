@@ -1,0 +1,14 @@
+name: sync_protocol
+description: >-
+  Shared wire protocol for xalarm time-sync sessions: message envelope,
+  timer/stopwatch action payloads, pairing codes, and clock-offset math.
+  Pure Dart — used by both the Flutter app and the relay server.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.12.0
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.31.0
