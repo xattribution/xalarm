@@ -69,6 +69,21 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
                 }
+                "setKeepScreenOn" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    runOnUiThread {
+                        if (enabled) {
+                            window.addFlags(
+                                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                            )
+                        } else {
+                            window.clearFlags(
+                                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                            )
+                        }
+                    }
+                    result.success(true)
+                }
                 "openUrl" -> {
                     val url = call.argument<String>("url")
                     if (url == null) {

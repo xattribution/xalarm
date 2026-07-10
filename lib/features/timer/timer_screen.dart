@@ -4,6 +4,7 @@ import 'package:alarm/alarm.dart' as pkg;
 import 'package:flutter/material.dart';
 
 import '../../core/constants.dart';
+import 'zen_screen.dart';
 
 /// Countdown timer. The end-of-timer ring is scheduled as a one-shot native
 /// alarm, so it fires even if the app is backgrounded or the screen is off.
@@ -141,34 +142,67 @@ class _TimerScreenState extends State<TimerScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
+          Align(
+            alignment: Alignment.topRight,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: TextButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    fullscreenDialog: true,
+                    builder: (_) => const ZenScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.self_improvement, size: 20),
+                label: const Text('Zen'),
+              ),
+            ),
+          ),
           const Spacer(),
-          SizedBox(
-            width: 240,
-            height: 240,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 240,
-                  height: 240,
-                  child: CircularProgressIndicator(
-                    value: progress.clamp(0.0, 1.0),
-                    strokeWidth: 6,
-                    backgroundColor: scheme.surfaceContainerHighest,
-                    color: _running ? scheme.primary : scheme.secondary,
-                    strokeCap: StrokeCap.round,
+          // Tap the ring to start/pause.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _running ? _pause() : _start(),
+            child: SizedBox(
+              width: 240,
+              height: 240,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 240,
+                    height: 240,
+                    child: CircularProgressIndicator(
+                      value: progress.clamp(0.0, 1.0),
+                      strokeWidth: 6,
+                      backgroundColor: scheme.surfaceContainerHighest,
+                      color: _running ? scheme.primary : scheme.secondary,
+                      strokeCap: StrokeCap.round,
+                    ),
                   ),
-                ),
-                Text(
-                  _fmt(_remaining),
-                  style: TextStyle(
-                    fontSize: 52,
-                    fontWeight: FontWeight.w200,
-                    color: scheme.onSurface,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _fmt(_remaining),
+                        style: TextStyle(
+                          fontSize: 52,
+                          fontWeight: FontWeight.w200,
+                          color: scheme.onSurface,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      Icon(
+                        _running
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        size: 22,
+                        color: scheme.onSurface.withValues(alpha: 0.35),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 24),

@@ -82,6 +82,16 @@ class SystemSounds {
     await _channel.invokeMethod('openUrl', {'url': url});
   }
 
+  /// Keep the screen awake (zen sessions). Always pair with a `false` call.
+  Future<void> setKeepScreenOn(bool enabled) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await _channel.invokeMethod('setKeepScreenOn', {'enabled': enabled});
+    } on PlatformException {
+      // Cosmetic feature — never worth surfacing an error.
+    }
+  }
+
   Future<List<SystemSoundInfo>> list() async {
     if (defaultTargetPlatform != TargetPlatform.android) return const [];
     try {
