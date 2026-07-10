@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Play Store upload key — never commit (the committed xalarm-release.p12 is
+# only for the self-hosted sideload channel).
+android/key.properties
+*.upload.jks
+*.upload.p12
+dist/

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xalarm — privacy policy</title>
+<style>
+  :root {
+    --bg: #0E1116; --surface: #171A1F; --blue: #3B6FE0;
+    --tan: #CBAE86; --text: #F2F4F7; --muted: #9AA4B2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.65; padding: 40px 20px;
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 28px; margin-bottom: 4px; }
+  .updated { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+  h2 { font-size: 18px; color: var(--tan); margin: 28px 0 8px; }
+  p, li { color: var(--text); font-size: 15px; }
+  ul { padding-left: 22px; margin: 8px 0; }
+  a { color: var(--blue); }
+  .card {
+    background: var(--surface); border-radius: 14px;
+    padding: 16px 20px; margin: 20px 0;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>xalarm privacy policy</h1>
+  <p class="updated">Last updated: July 2026</p>
+
+  <div class="card">
+    <p><strong>Short version:</strong> xalarm collects no personal data. Your
+    alarms, schedules, and settings never leave your device. There are no
+    accounts, no analytics, no ads, and no tracking of any kind.</p>
+  </div>
+
+  <h2>Data stored on your device</h2>
+  <p>Alarms, shift schedules, world-clock cities, stopwatch/timer state,
+  imported alarm sounds, and app settings are stored locally on your device
+  only. Uninstalling the app deletes them.</p>
+
+  <h2>Data the app transmits</h2>
+  <ul>
+    <li><strong>Nothing by default.</strong> The core app works fully
+    offline.</li>
+    <li><strong>Time Sync (optional):</strong> if you start a sync session,
+    the display name you type, a temporary session code, and timer/stopwatch
+    actions (start/stop times) are relayed through the sync server to the one
+    person you explicitly pair with. Sessions are held in the server's memory
+    only, are never written to disk, and are deleted when the session ends.
+    </li>
+    <li><strong>Home Assistant API (optional, off by default):</strong> when
+    you enable it, the app answers requests on your own local network,
+    protected by a token you control. Nothing is sent to us.</li>
+    <li><strong>Sounds added from a URL (optional):</strong> the file is
+    downloaded once directly from the URL you provide and stored on your
+    device.</li>
+  </ul>
+
+  <h2>Data we collect</h2>
+  <p>None. We operate no analytics, no crash reporting, no advertising, and
+  no user accounts. We cannot see your alarms, schedules, or usage.</p>
+
+  <h2>Permissions the app requests</h2>
+  <ul>
+    <li><strong>Alarms &amp; reminders / notifications:</strong> to ring
+    alarms reliably at exact times.</li>
+    <li><strong>Sensors (accelerometer):</strong> used only on-device for the
+    Zen hourglass tilt controls.</li>
+    <li><strong>Files (when you choose a sound):</strong> only the audio file
+    you pick is copied into the app.</li>
+  </ul>
+
+  <h2>Children</h2>
+  <p>xalarm is a general-audience utility and does not knowingly collect any
+  data from anyone, including children.</p>
+
+  <h2>Changes &amp; contact</h2>
+  <p>If this policy changes, the updated version will be posted at this
+  address. Questions: open an issue on the
+  <a href="https://github.com/xattribution/xalarm">project repository</a>.</p>
+</main>
+</body>
+</html>

@@ -267,7 +267,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ListTile(
                   title: Text('xalarm ${BuildInfo.version}'),
                   subtitle: Text(
-                    'build ${BuildInfo.commit} · ${BuildInfo.date}',
+                    BuildInfo.isPlayStore
+                        ? 'build ${BuildInfo.commit} · updates via Google Play'
+                        : 'build ${BuildInfo.commit} · ${BuildInfo.date}',
                     style: TextStyle(
                       fontSize: 12.5,
                       color: context.mutedColor,
@@ -275,6 +277,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
                 ),
+                // Play policy forbids self-updating apps; the whole
+                // check/download flow only exists in sideload builds.
+                if (!BuildInfo.isPlayStore) ...[
                 const Divider(height: 1),
                 ListTile(
                   title: const Text('Update server'),
@@ -356,6 +361,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           TextStyle(fontSize: 12, color: context.mutedColor),
                     ),
                   ),
+                ], // end of sideload-only updater block
               ],
             ),
           ),
