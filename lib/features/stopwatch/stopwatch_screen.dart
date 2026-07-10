@@ -1,24 +1,69 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/data/json_file.dart';
 import '../../core/theme/app_theme.dart';
+import '../../services/widget_sync.dart';
 
-/// Stopwatch with laps. State lives in this widget and survives tab switches
-/// because the shell keeps tabs alive in an IndexedStack.
-class StopwatchScreen extends StatefulWidget {
+/// Stopwatch with laps. State is epoch-based and persisted, so it keeps
+/// counting across app restarts and feeds the home-screen widget.
+class StopwatchScreen extends ConsumerStatefulWidget {
   const StopwatchScreen({super.key});
 
   @override
-  State<StopwatchScreen> createState() => _StopwatchScreenState();
+  ConsumerState<StopwatchScreen> createState() => _StopwatchScreenState();
 }
 
-class _StopwatchScreenState extends State<StopwatchScreen> {
-  final _watch = Stopwatch();
-  Timer? _tick;
-  final List<Duration> _laps = [];
+class _StopwatchScreenState extends ConsumerState<StopwatchScreen> {
+  final _file = JsonFile('stopwatch.json');
 
-  bool get _running => _watch.isRunning;
+  Duration _accumulated = Duration.zero;
+  DateTime? _runningSince; // non-null while running
+  List<Duration> _laps = [];
+  Timer? _tick;
+
+  bool get _running => _runningSince != null;
+
+  Duration get _elapsed =>
+      _accumulated +
+      (_runningSince == null
+          ? Duration.zero
+          : DateTime.now().difference(_runningSince!));
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final raw = await _file.read();
+    if (raw is! Map || !mounted) return;
+    final map = Map<String, dynamic>.from(raw);
+    setState(() {
+      _accumulated = Duration(milliseconds: map['accumulatedMs'] as int? ?? 0);
+      final since = map['runningSinceEpochMs'] as int?;
+      _runningSince = since == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(since);
+      _laps = [
+        for (final ms in (map['laps'] as List? ?? const []))
+          Duration(milliseconds: ms as int),
+      ];
+    });
+    if (_running) _startTick();
+  }
+
+  Future<void> _persist() async {
+    await _file.write({
+      'accumulatedMs': _accumulated.inMilliseconds,
+      'runningSinceEpochMs': _runningSince?.millisecondsSinceEpoch,
+      'laps': [for (final l in _laps) l.inMilliseconds],
+    });
+    unawaited(ref.read(widgetSyncProvider).push());
+  }
 
   void _startTick() {
     _tick ??= Timer.periodic(const Duration(milliseconds: 33), (_) {
@@ -34,24 +79,28 @@ class _StopwatchScreenState extends State<StopwatchScreen> {
   void _startPause() {
     setState(() {
       if (_running) {
-        _watch.stop();
+        _accumulated = _elapsed;
+        _runningSince = null;
         _stopTick();
       } else {
-        _watch.start();
+        _runningSince = DateTime.now();
         _startTick();
       }
     });
+    _persist();
   }
 
   void _lapOrReset() {
     setState(() {
       if (_running) {
-        _laps.add(_watch.elapsed);
+        _laps.add(_elapsed);
       } else {
-        _watch.reset();
+        _accumulated = Duration.zero;
+        _runningSince = null;
         _laps.clear();
       }
     });
+    _persist();
   }
 
   @override
@@ -71,7 +120,7 @@ class _StopwatchScreenState extends State<StopwatchScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final elapsed = _watch.elapsed;
+    final elapsed = _elapsed;
     final hasTime = elapsed > Duration.zero;
 
     return Padding(

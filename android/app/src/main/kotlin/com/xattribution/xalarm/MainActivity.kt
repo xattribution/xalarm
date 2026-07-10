@@ -6,6 +6,7 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import com.xattribution.xalarm.widgets.WidgetStore
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -54,6 +55,15 @@ class MainActivity : FlutterActivity() {
                 "stopPreview" -> {
                     stopPreview(notify = false)
                     result.success(true)
+                }
+                "syncWidgets" -> {
+                    val json = call.argument<String>("json")
+                    if (json == null) {
+                        result.error("bad_args", "json is required", null)
+                    } else {
+                        WidgetStore.save(this, json)
+                        result.success(true)
+                    }
                 }
                 "openUrl" -> {
                     val url = call.argument<String>("url")

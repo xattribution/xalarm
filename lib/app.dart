@@ -9,9 +9,11 @@ import 'core/settings/settings_providers.dart';
 import 'core/theme/app_theme.dart';
 import 'features/alarm/application/alarm_providers.dart';
 import 'features/alarm/presentation/ring_screen.dart';
+import 'features/clock/application/world_clock_providers.dart';
 import 'features/shell/main_shell.dart';
 import 'services/ha_api_server.dart';
 import 'services/permissions_service.dart';
+import 'services/widget_sync.dart';
 
 /// Global navigator so the alarm ring stream (which fires outside the widget
 /// tree) can push the full-screen ring UI.
@@ -48,6 +50,9 @@ class _XalarmAppState extends ConsumerState<XalarmApp> {
     await ref.read(alarmListProvider.notifier).resyncAllWithOs();
 
     _ringSub = pkg.Alarm.ringing.listen(_onRinging);
+
+    // Seed the home-screen widgets with current data.
+    unawaited(ref.read(widgetSyncProvider).push());
   }
 
   void _onRinging(AlarmSet set) {
@@ -76,6 +81,15 @@ class _XalarmAppState extends ConsumerState<XalarmApp> {
   Widget build(BuildContext context) {
     // Keeps the local-network API server aligned with settings.
     ref.watch(haServerManagerProvider);
+
+    // Refresh the home-screen widgets whenever alarms or world-clock
+    // cities change.
+    ref.listen(alarmListProvider, (_, _) {
+      unawaited(ref.read(widgetSyncProvider).push());
+    });
+    ref.listen(worldClockProvider, (_, _) {
+      unawaited(ref.read(widgetSyncProvider).push());
+    });
 
     final mode =
         ref.watch(settingsProvider).value?.themeMode ?? ThemeMode.dark;

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_next_alarm_desc">Next alarm and your shift week at a glance</string>
+    <string name="widget_world_clock_desc">Compare two world-clock cities</string>
+    <string name="widget_stopwatch_desc">Live stopwatch</string>
+</resources>
