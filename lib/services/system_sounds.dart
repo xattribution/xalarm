@@ -24,8 +24,12 @@ class SystemSounds {
 
   SystemSounds() {
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'previewEnded') {
-        onPreviewEnded?.call();
+      switch (call.method) {
+        case 'previewEnded':
+          onPreviewEnded?.call();
+        case 'openTab':
+          final tab = call.arguments;
+          if (tab is int && tab >= 0) onOpenTab?.call(tab);
       }
     });
   }
@@ -33,6 +37,22 @@ class SystemSounds {
   /// Set by the sound picker so it can reset its play indicator when a
   /// preview finishes on its own (or is cut off by the OS).
   VoidCallback? onPreviewEnded;
+
+  /// Set by the app shell: a home-screen widget was tapped while the app was
+  /// already running and wants its tab shown.
+  void Function(int tab)? onOpenTab;
+
+  /// Tab requested by the widget that cold-launched the app, or -1.
+  Future<int> initialTab() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return -1;
+    try {
+      return await _channel.invokeMethod<int>('getInitialTab') ?? -1;
+    } on PlatformException {
+      return -1;
+    } on MissingPluginException {
+      return -1;
+    }
+  }
 
   /// Preview any sound source: 'system', an asset path, a content:// URI,
   /// or an absolute file path. A new preview replaces the previous one.

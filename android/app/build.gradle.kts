@@ -25,11 +25,24 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        // A stable, committed keystore so every build shares one signing
+        // identity — otherwise each Docker build generates a fresh debug key
+        // and Android refuses to install updates over the previous APK.
+        // This app is self-hosted/sideloaded; the keystore is not a secret
+        // worth protecting at the cost of broken updates.
+        create("release") {
+            storeFile = file("xalarm-release.p12")
+            storePassword = "xalarm-release"
+            keyAlias = "xalarm"
+            keyPassword = "xalarm-release"
+            storeType = "PKCS12"
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

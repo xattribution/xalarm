@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../services/system_sounds.dart';
 import '../alarm/presentation/alarm_edit_screen.dart';
 import '../alarm/presentation/alarm_list_screen.dart';
 import '../clock/clock_screen.dart';
@@ -31,6 +32,30 @@ class _MainShellState extends ConsumerState<MainShell> {
     StopwatchScreen(),
     TimerScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final bridge = ref.read(systemSoundsProvider);
+    // Widget tap while the app is running.
+    bridge.onOpenTab = (tab) {
+      if (mounted && tab >= 0 && tab < _pages.length) {
+        setState(() => _index = tab);
+      }
+    };
+    // Widget tap that cold-launched the app.
+    bridge.initialTab().then((tab) {
+      if (mounted && tab >= 0 && tab < _pages.length) {
+        setState(() => _index = tab);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    ref.read(systemSoundsProvider).onOpenTab = null;
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

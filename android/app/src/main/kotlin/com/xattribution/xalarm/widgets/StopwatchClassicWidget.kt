@@ -10,10 +10,10 @@ import com.xattribution.xalarm.R
 import java.util.Locale
 
 /**
- * Live stopwatch. While running it uses a Chronometer, which ticks natively
- * without waking the app; paused/reset shows the frozen elapsed time.
+ * Classic style: a round watch-face card with the live stopwatch centred in
+ * it. Same data as the digital widget, different look.
  */
-class StopwatchWidget : AppWidgetProvider() {
+class StopwatchClassicWidget : AppWidgetProvider() {
 
     override fun onUpdate(
         context: Context,
@@ -26,7 +26,7 @@ class StopwatchWidget : AppWidgetProvider() {
     }
 
     private fun render(context: Context): RemoteViews {
-        val views = RemoteViews(context.packageName, R.layout.widget_stopwatch)
+        val views = RemoteViews(context.packageName, R.layout.widget_stopwatch_classic)
         views.setOnClickPendingIntent(R.id.root, WidgetStore.launchIntent(context, 2))
 
         val sw = WidgetStore.data(context)?.optJSONObject("stopwatch")

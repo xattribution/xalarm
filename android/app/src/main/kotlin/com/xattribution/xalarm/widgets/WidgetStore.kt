@@ -34,7 +34,9 @@ object WidgetStore {
         val providers = listOf(
             NextAlarmWidget::class.java,
             WorldClockWidget::class.java,
+            WorldClockAnalogWidget::class.java,
             StopwatchWidget::class.java,
+            StopwatchClassicWidget::class.java,
         )
         for (cls in providers) {
             val ids = mgr.getAppWidgetIds(ComponentName(context, cls))
@@ -47,14 +49,24 @@ object WidgetStore {
         }
     }
 
-    /** Tap-to-open-app intent shared by all widgets. */
-    fun launchIntent(context: Context): PendingIntent {
-        val intent = context.packageManager
-            .getLaunchIntentForPackage(context.packageName)
-            ?: Intent()
+    /**
+     * Tap-to-open intent that deep-links to a bottom tab
+     * (0 alarm · 1 clock · 2 stopwatch · 3 timer). Unique request codes per
+     * tab keep the PendingIntent extras from colliding across widgets.
+     */
+    fun launchIntent(context: Context, tab: Int): PendingIntent {
+        val intent = Intent(
+            context,
+            com.xattribution.xalarm.MainActivity::class.java,
+        ).apply {
+            action = Intent.ACTION_MAIN
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("xalarm_tab", tab)
+        }
         return PendingIntent.getActivity(
             context,
-            0,
+            100 + tab,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

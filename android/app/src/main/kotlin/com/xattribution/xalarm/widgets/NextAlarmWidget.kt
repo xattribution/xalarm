@@ -29,7 +29,7 @@ class NextAlarmWidget : AppWidgetProvider() {
 
     private fun render(context: Context): RemoteViews {
         val views = RemoteViews(context.packageName, R.layout.widget_next_alarm)
-        views.setOnClickPendingIntent(R.id.root, WidgetStore.launchIntent(context))
+        views.setOnClickPendingIntent(R.id.root, WidgetStore.launchIntent(context, 0))
 
         val data = WidgetStore.data(context)
         val nextMs = data?.optLong("nextAlarmAtMs", -1L) ?: -1L

@@ -67,8 +67,7 @@ class WidgetSyncService {
       'shiftLabel': shiftLabel,
       'shiftDays': shiftDays,
       'zones': [
-        for (final z in zones.take(2))
-          {'city': z.split('/').last.replaceAll('_', ' '), 'tz': z},
+        for (final c in zones) {'city': c.name, 'tz': c.tz},
       ],
       'stopwatch': stopwatch is Map
           ? Map<String, dynamic>.from(stopwatch)

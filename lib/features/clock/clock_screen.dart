@@ -8,6 +8,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../../core/theme/app_theme.dart';
 import '../../core/time/time_format.dart';
 import 'application/world_clock_providers.dart';
+import 'domain/world_city.dart';
 
 /// The Clock tab: a live local clock plus a comparable list of world cities.
 class ClockScreen extends ConsumerStatefulWidget {
@@ -38,7 +39,7 @@ class _ClockScreenState extends ConsumerState<ClockScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final zones = ref.watch(worldClockProvider).value ?? const [];
+    final cities = ref.watch(worldClockProvider).value ?? const <WorldCity>[];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 96),
@@ -64,7 +65,7 @@ class _ClockScreenState extends ConsumerState<ClockScreen> {
           ),
         ),
         const SizedBox(height: 28),
-        if (zones.isEmpty)
+        if (cities.isEmpty)
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -85,16 +86,16 @@ class _ClockScreenState extends ConsumerState<ClockScreen> {
             ),
           )
         else
-          for (final zoneId in zones)
-            _ZoneCard(zoneId: zoneId, now: _now),
+          for (final city in cities)
+            _ZoneCard(city: city, now: _now),
       ],
     );
   }
 }
 
 class _ZoneCard extends ConsumerWidget {
-  const _ZoneCard({required this.zoneId, required this.now});
-  final String zoneId;
+  const _ZoneCard({required this.city, required this.now});
+  final WorldCity city;
   final DateTime now;
 
   @override
@@ -103,15 +104,12 @@ class _ZoneCard extends ConsumerWidget {
 
     tz.TZDateTime? there;
     try {
-      there = tz.TZDateTime.now(tz.getLocation(zoneId));
+      there = tz.TZDateTime.now(tz.getLocation(city.tz));
     } catch (_) {
       there = null;
     }
 
-    final city = zoneId.split('/').last.replaceAll('_', ' ');
-    final region = zoneId.contains('/')
-        ? zoneId.substring(0, zoneId.lastIndexOf('/')).replaceAll('_', ' ')
-        : '';
+    final region = city.region;
 
     String offsetLabel = '—';
     String dayLabel = '';
@@ -138,7 +136,7 @@ class _ZoneCard extends ConsumerWidget {
     }
 
     return Dismissible(
-      key: ValueKey(zoneId),
+      key: ValueKey('${city.name}|${city.tz}'),
       direction: DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
@@ -151,7 +149,7 @@ class _ZoneCard extends ConsumerWidget {
         child: Icon(Icons.delete_outline, color: scheme.error),
       ),
       onDismissed: (_) =>
-          ref.read(worldClockProvider.notifier).remove(zoneId),
+          ref.read(worldClockProvider.notifier).remove(city),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -166,7 +164,7 @@ class _ZoneCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    city,
+                    city.name,
                     style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w600,

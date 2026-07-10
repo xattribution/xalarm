@@ -49,13 +49,35 @@
         <receiver
             android:name=".widgets.StopwatchWidget"
             android:exported="false"
-            android:label="Stopwatch">
+            android:label="Stopwatch (digital)">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_stopwatch_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.StopwatchClassicWidget"
+            android:exported="false"
+            android:label="Stopwatch (classic)">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_stopwatch_classic_info" />
+        </receiver>
+        <receiver
+            android:name=".widgets.WorldClockAnalogWidget"
+            android:exported="false"
+            android:label="World clock (analog)">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_world_clock_analog_info" />
         </receiver>
         <activity
             android:name=".MainActivity"

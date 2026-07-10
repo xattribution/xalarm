@@ -5,8 +5,11 @@ import 'package:timezone/timezone.dart' as tz;
 import '../../core/theme/app_theme.dart';
 import '../../core/time/time_format.dart';
 import 'application/world_clock_providers.dart';
+import 'domain/city_aliases.dart';
+import 'domain/world_city.dart';
 
-/// Searchable list of all IANA time zones to add to the world clock.
+/// Searchable list of cities: every IANA zone city plus a table of major
+/// cities that aren't zone names (San Antonio, Dallas, Mumbai, …).
 class WorldClockAddScreen extends ConsumerStatefulWidget {
   const WorldClockAddScreen({super.key});
 
@@ -17,20 +20,41 @@ class WorldClockAddScreen extends ConsumerStatefulWidget {
 
 class _WorldClockAddScreenState extends ConsumerState<WorldClockAddScreen> {
   String _query = '';
+  late final List<WorldCity> _all = _buildCatalogue();
+
+  static List<WorldCity> _buildCatalogue() {
+    final entries = <WorldCity>[
+      for (final id in tz.timeZoneDatabase.locations.keys)
+        if (id.contains('/') && !id.startsWith('Etc/'))
+          WorldCity.fromZoneId(id),
+      for (final e in kCityAliases.entries)
+        WorldCity(name: e.key, tz: e.value),
+    ];
+    // Drop alias duplicates of real zone cities, then sort by name.
+    final seen = <String>{};
+    final unique = <WorldCity>[
+      for (final c in entries)
+        if (seen.add(c.name.toLowerCase())) c,
+    ];
+    unique.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return unique;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final added = ref.watch(worldClockProvider).value ?? const [];
+    final added = ref.watch(worldClockProvider).value ?? const <WorldCity>[];
+    final addedKeys = {for (final c in added) '${c.name}|${c.tz}'};
 
-    final all = tz.timeZoneDatabase.locations.keys
-        .where((id) => id.contains('/') && !id.startsWith('Etc/'))
-        .toList()
-      ..sort();
-
-    final q = _query.trim().toLowerCase().replaceAll(' ', '_');
+    final q = _query.trim().toLowerCase();
     final results = q.isEmpty
-        ? all
-        : all.where((id) => id.toLowerCase().contains(q)).toList();
+        ? _all
+        : [
+            for (final c in _all)
+              if (c.name.toLowerCase().contains(q) ||
+                  c.region.toLowerCase().contains(q) ||
+                  c.tz.toLowerCase().replaceAll('_', ' ').contains(q))
+                c,
+          ];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Add city')),
@@ -57,22 +81,21 @@ class _WorldClockAddScreenState extends ConsumerState<WorldClockAddScreen> {
             child: ListView.builder(
               itemCount: results.length,
               itemBuilder: (context, i) {
-                final id = results[i];
-                final city = id.split('/').last.replaceAll('_', ' ');
-                final region = id
-                    .substring(0, id.lastIndexOf('/'))
-                    .replaceAll('_', ' ');
-                final already = added.contains(id);
+                final city = results[i];
+                final already =
+                    addedKeys.contains('${city.name}|${city.tz}');
 
                 String time = '';
                 try {
-                  time = TimeFormat.clock(tz.TZDateTime.now(tz.getLocation(id)));
+                  time = TimeFormat.clock(
+                    tz.TZDateTime.now(tz.getLocation(city.tz)),
+                  );
                 } catch (_) {}
 
                 return ListTile(
-                  title: Text(city),
+                  title: Text(city.name),
                   subtitle: Text(
-                    region,
+                    city.region,
                     style: TextStyle(color: context.mutedColor, fontSize: 12.5),
                   ),
                   trailing: already
@@ -86,7 +109,7 @@ class _WorldClockAddScreenState extends ConsumerState<WorldClockAddScreen> {
                         ),
                   enabled: !already,
                   onTap: () async {
-                    await ref.read(worldClockProvider.notifier).add(id);
+                    await ref.read(worldClockProvider.notifier).add(city);
                     if (context.mounted) Navigator.of(context).pop();
                   },
                 );

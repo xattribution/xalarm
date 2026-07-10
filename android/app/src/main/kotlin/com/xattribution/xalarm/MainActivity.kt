@@ -56,6 +56,10 @@ class MainActivity : FlutterActivity() {
                     stopPreview(notify = false)
                     result.success(true)
                 }
+                "getInitialTab" -> {
+                    result.success(intent?.getIntExtra("xalarm_tab", -1) ?: -1)
+                    intent?.removeExtra("xalarm_tab")
+                }
                 "syncWidgets" -> {
                     val json = call.argument<String>("json")
                     if (json == null) {
@@ -85,6 +89,18 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // A widget tap while the app is already running: tell Flutter which
+        // tab to show.
+        val tab = intent.getIntExtra("xalarm_tab", -1)
+        if (tab >= 0) {
+            channel?.invokeMethod("openTab", tab)
+            intent.removeExtra("xalarm_tab")
         }
     }
 

@@ -2,5 +2,7 @@
 <resources>
     <string name="widget_next_alarm_desc">Next alarm and your shift week at a glance</string>
     <string name="widget_world_clock_desc">Compare two world-clock cities</string>
-    <string name="widget_stopwatch_desc">Live stopwatch</string>
+    <string name="widget_stopwatch_desc">Live stopwatch — digital</string>
+    <string name="widget_stopwatch_classic_desc">Live stopwatch — classic watch face</string>
+    <string name="widget_world_clock_analog_desc">Two cities as analog watch faces (Android 12+)</string>
 </resources>
