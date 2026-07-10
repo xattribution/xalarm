@@ -24,10 +24,19 @@ subprojects {
 // 35+), which fails the AAR metadata check. Force every Android module up to
 // a current compileSdk; this only changes which APIs modules compile against,
 // not minSdk/targetSdk runtime behaviour.
+//
+// evaluationDependsOn(":app") above means some projects are already evaluated
+// when this block runs — configure those immediately, defer the rest.
 subprojects {
-    afterEvaluate {
-        extensions.findByType(com.android.build.gradle.BaseExtension::class.java)
+    fun forceCompileSdk(project: Project) {
+        project.extensions
+            .findByType(com.android.build.gradle.BaseExtension::class.java)
             ?.compileSdkVersion(36)
+    }
+    if (state.executed) {
+        forceCompileSdk(this)
+    } else {
+        afterEvaluate { forceCompileSdk(this) }
     }
 }
 
