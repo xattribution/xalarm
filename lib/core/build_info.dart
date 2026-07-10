@@ -3,6 +3,9 @@
 class BuildInfo {
   const BuildInfo._();
 
+  /// Keep in sync with pubspec.yaml's `version`.
+  static const String version = '1.2.1';
+
   static const String commit = String.fromEnvironment(
     'BUILD_COMMIT',
     defaultValue: 'dev',

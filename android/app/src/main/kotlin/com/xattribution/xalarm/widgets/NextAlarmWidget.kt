@@ -33,7 +33,12 @@ class NextAlarmWidget : AppWidgetProvider() {
 
         val data = WidgetStore.data(context)
         val nextMs = data?.optLong("nextAlarmAtMs", -1L) ?: -1L
-        if (nextMs > 0) {
+        if (nextMs in 1..System.currentTimeMillis()) {
+            // The stored alarm already fired and the app hasn't refreshed the
+            // snapshot yet — don't show a time in the past.
+            views.setTextViewText(R.id.tv_time, "Open xalarm to refresh")
+            views.setViewVisibility(R.id.tv_label, View.GONE)
+        } else if (nextMs > 0) {
             views.setTextViewText(R.id.tv_time, formatWhen(nextMs))
             val label = data?.optString("nextAlarmLabel").orEmpty()
             if (label.isEmpty()) {

@@ -220,9 +220,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: Column(
               children: [
                 ListTile(
-                  title: const Text('This build'),
+                  title: Text('xalarm ${BuildInfo.version}'),
                   subtitle: Text(
-                    '${BuildInfo.commit} · ${BuildInfo.date}',
+                    'build ${BuildInfo.commit} · ${BuildInfo.date}',
                     style: TextStyle(
                       fontSize: 12.5,
                       color: context.mutedColor,
