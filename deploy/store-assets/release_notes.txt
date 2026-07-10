@@ -1,0 +1,27 @@
+v1.5.0 (first Play release) — paste into "What's new" (500 char max):
+----------------------------------------------------------------------
+First release.
+
+Alarms that follow rotating shift schedules — Panama (2-2-3), DuPont,
+Pitman, 4-on/4-off, or build your own cycle, with different start times
+on different days. Plus a world clock with real city search, a stopwatch
+that survives restarts, timers, a zen hourglass focus timer you control
+by tilting the phone, home screen widgets, and a live shared timer you
+can pair with one other person. No accounts, no ads, no tracking.
+----------------------------------------------------------------------
+
+Template for future releases (keep the same voice: plain, concrete,
+lead with what shift workers care about, no marketing filler):
+
+vX.Y.Z
+- <the one change users will actually notice, in one sentence>
+- <fixes, briefly: "Fixed the alarm list showing the wrong next-fire
+  time after midnight." not "Various bug fixes and improvements.">
+- <only mention internals if they affect users: faster startup, smaller
+  app, better battery — with no adjectives you can't defend>
+
+Rules of thumb:
+- 500 characters max; 2-4 bullets is plenty.
+- Name the schedule patterns when relevant (Panama, DuPont, 2-2-3) —
+  it's what the audience searches and scans for.
+- "Fixed" beats "improved reliability". Specific beats broad.
