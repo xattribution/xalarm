@@ -19,6 +19,18 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// Some Flutter plugins pin an outdated compileSdk in their own build.gradle
+// (the `alarm` plugin pins 34, while its flutter_fgbg dependency requires
+// 35+), which fails the AAR metadata check. Force every Android module up to
+// a current compileSdk; this only changes which APIs modules compile against,
+// not minSdk/targetSdk runtime behaviour.
+subprojects {
+    afterEvaluate {
+        extensions.findByType(com.android.build.gradle.BaseExtension::class.java)
+            ?.compileSdkVersion(36)
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
