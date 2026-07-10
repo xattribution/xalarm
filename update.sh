@@ -21,7 +21,10 @@ set -euo pipefail
 REPO_URL="${XALARM_REPO_URL:-https://github.com/xattribution/xalarm.git}"
 # NOTE: switch the default to `main` once the app is merged there.
 BRANCH="${XALARM_BRANCH:-claude/panama-schedule-alarm-app-exj97n}"
-DIR="${XALARM_WEB_DIR:-$HOME/xalarm}"
+# Default: clone next to wherever this script lives (survives running via
+# sudo, where $HOME silently becomes /root). Override with XALARM_WEB_DIR.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DIR="${XALARM_WEB_DIR:-$SCRIPT_DIR/xalarm}"
 PORT="${XALARM_WEB_PORT:-49731}"
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }

@@ -6,7 +6,9 @@ version: 0.1.0
 publish_to: 'none'
 
 environment:
-  sdk: ^3.12.2
+  # ^3.12.0 (not .2) so the package resolves on any Flutter 3.44.x — the
+  # Docker builder image's `stable` tag can lag a patch release behind.
+  sdk: ^3.12.0
 
 dev_dependencies:
   lints: ^5.0.0
