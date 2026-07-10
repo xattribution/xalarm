@@ -55,6 +55,13 @@ class SystemSounds {
     }
   }
 
+  /// Open a URL in the default browser (used by the in-app update flow to
+  /// hand the APK download to Android's normal install path).
+  Future<void> openUrl(String url) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    await _channel.invokeMethod('openUrl', {'url': url});
+  }
+
   Future<List<SystemSoundInfo>> list() async {
     if (defaultTargetPlatform != TargetPlatform.android) return const [];
     try {

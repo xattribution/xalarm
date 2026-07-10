@@ -61,7 +61,7 @@ class _SoundPickerScreenState extends ConsumerState<SoundPickerScreen> {
 
   Future<void> _importFile() async {
     await _run(() async {
-      final result = await FilePicker.pickFiles(type: FileType.audio);
+      final result = await FilePicker.platform.pickFiles(type: FileType.audio);
       final path = result?.files.single.path;
       if (path == null) return null;
       final tone = await ref.read(ringtoneLibraryProvider).importFile(path);

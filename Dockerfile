@@ -16,6 +16,11 @@
 ARG FLUTTER_IMAGE_TAG=stable
 FROM ghcr.io/cirruslabs/flutter:${FLUTTER_IMAGE_TAG} AS builder
 
+# Baked into the APK so the app can compare itself against the server's
+# version.json and offer in-app updates.
+ARG BUILD_COMMIT=dev
+ARG BUILD_DATE=unknown
+
 WORKDIR /src
 
 # Dependency resolution first, so source-only changes reuse this layer.
@@ -30,7 +35,9 @@ RUN flutter pub get
 # Deploy gate: a broken recurrence engine must fail the build, not ship.
 RUN cd packages/recurrence_engine && dart pub get && dart test
 
-RUN flutter build apk --release
+RUN flutter build apk --release \
+      --dart-define=BUILD_COMMIT=$BUILD_COMMIT \
+      --dart-define=BUILD_DATE=$BUILD_DATE
 
 # ---------------------------------------------------------------------------
 # Stage 2: serve the APK + download page

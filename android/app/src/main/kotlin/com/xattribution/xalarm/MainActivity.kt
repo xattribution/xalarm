@@ -55,6 +55,24 @@ class MainActivity : FlutterActivity() {
                     stopPreview(notify = false)
                     result.success(true)
                 }
+                "openUrl" -> {
+                    val url = call.argument<String>("url")
+                    if (url == null) {
+                        result.error("bad_args", "url is required", null)
+                    } else {
+                        try {
+                            startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    Uri.parse(url),
+                                ),
+                            )
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("open_failed", e.message, null)
+                        }
+                    }
+                }
                 else -> result.notImplemented()
             }
         }

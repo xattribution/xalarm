@@ -2,15 +2,93 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/build_info.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/settings/settings_providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../services/system_sounds.dart';
+import '../../services/update_checker.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  bool _checking = false;
+  UpdateCheckResult? _lastCheck;
+  String? _checkError;
+
+  Future<void> _checkForUpdates() async {
+    final settings =
+        ref.read(settingsProvider).value ?? const AppSettings();
+    setState(() {
+      _checking = true;
+      _checkError = null;
+    });
+    try {
+      final result = await ref
+          .read(updateCheckerProvider)
+          .check(settings.updateUrl);
+      setState(() => _lastCheck = result);
+    } catch (e) {
+      setState(() {
+        _lastCheck = null;
+        _checkError = 'Could not reach the update server: $e';
+      });
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  Future<void> _downloadUpdate() async {
+    final apkUrl = _lastCheck?.apkUrl;
+    if (apkUrl == null) return;
+    try {
+      await ref.read(systemSoundsProvider).openUrl(apkUrl);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open the download: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _editUpdateUrl(String current) async {
+    final controller = TextEditingController(text: current);
+    final url = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Update server'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(hintText: kDefaultUpdateUrl),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (url != null) {
+      await ref.read(settingsProvider.notifier).setUpdateUrl(url);
+      setState(() => _lastCheck = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
     final controller = ref.read(settingsProvider.notifier);
     final scheme = Theme.of(context).colorScheme;
@@ -133,6 +211,106 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                   ),
                 ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          const _SectionLabel('About & updates'),
+          _Panel(
+            child: Column(
+              children: [
+                ListTile(
+                  title: const Text('This build'),
+                  subtitle: Text(
+                    '${BuildInfo.commit} · ${BuildInfo.date}',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: context.mutedColor,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  title: const Text('Update server'),
+                  subtitle: Text(
+                    settings.updateUrl,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        TextStyle(fontSize: 12.5, color: context.mutedColor),
+                  ),
+                  trailing: Icon(Icons.edit_outlined,
+                      size: 18, color: context.mutedColor),
+                  onTap: () => _editUpdateUrl(settings.updateUrl),
+                ),
+                const Divider(height: 1),
+                if (_lastCheck?.updateAvailable ?? false)
+                  ListTile(
+                    leading: Icon(Icons.system_update, color: scheme.primary),
+                    title: const Text('Update available'),
+                    subtitle: Text(
+                      'Build ${_lastCheck!.remoteCommit} · '
+                      '${_lastCheck!.remoteDate}',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: context.mutedColor,
+                      ),
+                    ),
+                    trailing: FilledButton(
+                      onPressed: _downloadUpdate,
+                      child: const Text('Download'),
+                    ),
+                  )
+                else
+                  ListTile(
+                    leading: _checking
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            _lastCheck != null
+                                ? Icons.check_circle_outline
+                                : Icons.refresh,
+                            color: _lastCheck != null
+                                ? scheme.secondary
+                                : context.mutedColor,
+                          ),
+                    title: Text(
+                      _checking
+                          ? 'Checking…'
+                          : _checkError != null
+                              ? 'Check failed'
+                              : _lastCheck != null
+                                  ? 'Up to date'
+                                  : 'Check for updates',
+                    ),
+                    subtitle: _checkError == null
+                        ? null
+                        : Text(
+                            _checkError!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.mutedColor,
+                            ),
+                          ),
+                    onTap: _checking ? null : _checkForUpdates,
+                  ),
+                if (_lastCheck?.updateAvailable ?? false)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Text(
+                      'The APK downloads in your browser; open it when '
+                      'finished to install over this version. Alarms and '
+                      'settings are kept.',
+                      style:
+                          TextStyle(fontSize: 12, color: context.mutedColor),
+                    ),
+                  ),
               ],
             ),
           ),
