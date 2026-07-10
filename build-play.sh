@@ -26,7 +26,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-KEYS_DIR="${XALARM_KEYS_DIR:-$HOME/xalarm-keys}"
+# Under sudo, $HOME becomes /root — resolve the invoking user's real home so
+# `sudo ./build-play.sh` finds ~/xalarm-keys where it was actually created.
+REAL_HOME="$(getent passwd "${SUDO_USER:-$USER}" | cut -d: -f6)"
+KEYS_DIR="${XALARM_KEYS_DIR:-${REAL_HOME:-$HOME}/xalarm-keys}"
 IMAGE="${XALARM_FLUTTER_IMAGE:-ghcr.io/cirruslabs/flutter:stable}"
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -66,6 +69,11 @@ docker run --rm \
 
 cp "$SCRIPT_DIR/build/app/outputs/bundle/release/app-release.aab" \
    "$SCRIPT_DIR/dist/xalarm-$VERSION.aab"
+
+# Hand the artifact back to the real user when run via sudo.
+if [ -n "${SUDO_USER:-}" ]; then
+  chown "$SUDO_USER" "$SCRIPT_DIR/dist/xalarm-$VERSION.aab" 2>/dev/null || true
+fi
 
 say "Done: dist/xalarm-$VERSION.aab"
 echo "  Upload it in Play Console → your app → (Internal) testing → Create release."
