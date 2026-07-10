@@ -32,11 +32,29 @@ curl http://localhost:49732/health   # → ok
 The app defaults to `wss://xalarm.tinbadger.com/sync`. Add a WebSocket
 route on whatever reverse proxy serves xalarm.tinbadger.com:
 
-**nginx:**
+The relay answers WebSocket upgrades on **both `/ws` and `/sync`**, so a
+proxy can forward the path as-is with no rewriting.
+
+**Nginx Proxy Manager** (no new subdomain needed — reuse the existing
+xalarm proxy host): edit the host → *Custom Locations* → add:
+- Define location: `/sync`
+- Scheme `http`, Forward Hostname/IP: your docker host, Forward Port `49732`
+- Click the gear icon on that location and paste (the host-level
+  *Websockets Support* toggle doesn't reliably apply inside custom
+  locations):
+
+```nginx
+proxy_http_version 1.1;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+proxy_read_timeout 3600s;
+```
+
+**Plain nginx:**
 
 ```nginx
 location /sync {
-    proxy_pass http://<docker-host>:49732/ws;
+    proxy_pass http://<docker-host>:49732;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
@@ -44,20 +62,16 @@ location /sync {
 }
 ```
 
-**Nginx Proxy Manager:** enable *Websockets Support* on the proxy host and
-add a custom location `/sync` → `http://<docker-host>:49732/ws`.
-
 **Caddy:**
 
 ```
 xalarm.tinbadger.com {
-    handle_path /sync* {
+    handle /sync {
         reverse_proxy <docker-host>:49732
     }
     # ...existing site config
 }
 ```
-(with Caddy, point the app at `wss://xalarm.tinbadger.com/sync/ws`.)
 
 LAN-only use works without any proxy: set the app's sync server to
 `ws://<server-ip>:49732/ws` in Settings → Time Sync.

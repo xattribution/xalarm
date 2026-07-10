@@ -40,8 +40,10 @@ void main(List<String> args) async {
     }
   }
 
+  // Accept both /ws (direct) and /sync (the path reverse proxies forward
+  // when the app's default wss://…/sync route is proxied as-is).
   final pipeline = Cascade()
-      .add((req) => req.url.path == 'ws'
+      .add((req) => req.url.path == 'ws' || req.url.path == 'sync'
           ? wsHandler(req)
           : Response.notFound('not found'))
       .add(handler)

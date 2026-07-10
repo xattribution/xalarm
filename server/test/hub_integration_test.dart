@@ -71,8 +71,9 @@ void main() {
       );
     });
     final pipeline = Cascade()
-        .add((req) =>
-            req.url.path == 'ws' ? wsHandler(req) : Response.notFound(''))
+        .add((req) => req.url.path == 'ws' || req.url.path == 'sync'
+            ? wsHandler(req)
+            : Response.notFound(''))
         .handler;
     server = await shelf_io.serve(pipeline, InternetAddress.loopbackIPv4, 0);
     wsUri = Uri.parse('ws://127.0.0.1:${server.port}/ws');
@@ -210,6 +211,23 @@ void main() {
 
     await alice.close();
     await bob2.close();
+  });
+
+  test('the /sync path works end to end (reverse-proxy passthrough)', () async {
+    final syncUri = Uri.parse('ws://127.0.0.1:${server.port}/sync');
+    final alice = TestClient(IOWebSocketChannel.connect(syncUri));
+    final bob = TestClient(IOWebSocketChannel.connect(syncUri));
+    alice.send(const Hello(name: 'Alice'));
+    bob.send(const Hello(name: 'Bob'));
+    await alice.expectMsg<Welcome>();
+    final wb = await bob.expectMsg<Welcome>();
+    alice.send(PairRequest(targetCode: wb.code));
+    await bob.expectMsg<PairIncoming>();
+    bob.send(const PairAccept());
+    await alice.expectMsg<Paired>();
+    await bob.expectMsg<Paired>();
+    await alice.close();
+    await bob.close();
   });
 
   test('explicit bye also triggers limbo for both', () async {
