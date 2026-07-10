@@ -107,8 +107,9 @@ follow [docs/home_assistant.md](docs/home_assistant.md).
 **Done:** recurrence engine (per-day start-time overrides included), full
 Alarm tab, custom shift-schedule builder with saved patterns, World Clock
 (multi-timezone compare), Stopwatch with laps, Timer that rings through the
-native alarm layer, persisted settings/theme, and the Home Assistant local
-API. Engine has 32 passing unit tests across three time zones.
+native alarm layer, persisted settings/theme, the Home Assistant local API,
+and per-alarm sounds (system default, bundled tones, your own files, or a
+one-time URL download) with hold-to-choose snooze durations. Engine has 32
+passing unit tests across three time zones.
 
-**Next:** iOS reliability polish, backup/export of schedules, per-alarm
-sounds.
+**Next:** iOS reliability polish, backup/export of schedules.

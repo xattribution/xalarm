@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:recurrence_engine/recurrence_engine.dart';
 
+import '../../../core/constants.dart';
 import '../../../core/time/time_format.dart';
+import '../../../services/ringtone_library.dart';
 import '../../schedules/application/pattern_providers.dart';
 import '../application/alarm_providers.dart';
 import '../domain/alarm.dart';
+import 'sound_picker_screen.dart';
 import 'widgets/editor_widgets.dart';
 
 /// The recurrence modes the editor can produce. Kept separate from the sealed
@@ -52,14 +55,16 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
   late String _label;
   late int _snoozeMinutes;
   late bool _vibrate;
+  late String _soundAsset;
 
   @override
   void initState() {
     super.initState();
     final e = widget.existing;
     _label = e?.label ?? '';
-    _snoozeMinutes = e?.snoozeMinutes ?? 9;
+    _snoozeMinutes = e?.snoozeMinutes ?? 5;
     _vibrate = e?.vibrate ?? true;
+    _soundAsset = e?.soundAsset ?? kDefaultSoundAsset;
     _time = const LocalTime(7, 0);
     _mode = RecurrenceMode.weekly;
     if (e != null) {
@@ -360,6 +365,18 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
           value: _label,
           onChanged: (v) => setState(() => _label = v),
         ),
+        PickerRow(
+          label: 'Sound',
+          value: RingtoneLibrary.displayName(_soundAsset),
+          onTap: () async {
+            final picked = await Navigator.of(context).push<String>(
+              MaterialPageRoute(
+                builder: (_) => SoundPickerScreen(current: _soundAsset),
+              ),
+            );
+            if (picked != null) setState(() => _soundAsset = picked);
+          },
+        ),
         StepperRow(
           label: 'Snooze',
           value: _snoozeMinutes,
@@ -418,6 +435,7 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
           bounds: bounds,
           snoozeMinutes: _snoozeMinutes,
           vibrate: _vibrate,
+          soundAsset: _soundAsset,
         ),
       );
     } else {
@@ -428,6 +446,7 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
           bounds: bounds,
           snoozeMinutes: _snoozeMinutes,
           vibrate: _vibrate,
+          soundAsset: _soundAsset,
         ),
       );
     }

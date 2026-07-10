@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:recurrence_engine/recurrence_engine.dart';
 
 import '../features/alarm/domain/alarm.dart';
+import 'ringtone_library.dart';
 
 /// Bridges the pure recurrence engine to the OS alarm layer.
 ///
@@ -30,10 +31,23 @@ class AlarmScheduler {
   int _baseIdOf(int nativeId) => nativeId ~/ _slots;
   int _nativeId(int alarmId, int index) => alarmId * _slots + index;
 
-  /// Cancel any native alarms belonging to [alarmId].
+  /// Cancel any native alarms belonging to [alarmId]. Queries the scheduled
+  /// set and stops only real ids — not all 64 slots — so this stays fast.
   Future<void> cancel(int alarmId) async {
-    for (var i = 0; i < _slots; i++) {
-      await pkg.Alarm.stop(_nativeId(alarmId, i));
+    final lo = alarmId * _slots;
+    final hi = lo + _slots;
+    try {
+      final scheduled = await pkg.Alarm.getAlarms();
+      for (final s in scheduled) {
+        if (s.id >= lo && s.id < hi) {
+          await pkg.Alarm.stop(s.id);
+        }
+      }
+    } catch (_) {
+      // Fallback: brute-force the slot range.
+      for (var i = 0; i < _slots; i++) {
+        await pkg.Alarm.stop(_nativeId(alarmId, i));
+      }
     }
   }
 
@@ -76,7 +90,10 @@ class AlarmScheduler {
     return pkg.AlarmSettings(
       id: nativeId,
       dateTime: when,
-      assetAudioPath: alarm.soundAsset,
+      // null plays the device's default alarm sound.
+      assetAudioPath: alarm.soundAsset == kSystemDefaultSound
+          ? null
+          : alarm.soundAsset,
       loopAudio: true,
       vibrate: alarm.vibrate,
       androidFullScreenIntent: true,
