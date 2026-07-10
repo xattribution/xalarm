@@ -62,11 +62,8 @@ play.google.com/console → Create app:
   and is permanent after that.
 
 ### Store listing
-- Short description (≤80 chars), e.g.
-  *Alarms built for shift work — Panama & rotating schedules, zen timer, sync.*
-- Full description: lead with rotating-shift alarms (Panama 2-2-3, 4-on/2-off,
-  DuPont, custom cycles, per-day start times), then world clock, stopwatch,
-  timer, zen mode, home-screen widgets.
+- Listing copy: short + full descriptions are finalized below and in
+  `deploy/store-assets/full_description.txt`.
 - Graphics (in `deploy/store-assets/`): `play-icon-512.png`,
   `feature-graphic.png`. Screenshots: at least 2 phone screenshots — take
   them on your device (alarm list with a shift alarm, the shift schedule
@@ -133,3 +130,12 @@ play.google.com/console → Create app:
 | Format | APK | AAB |
 | In-app updater | yes | compiled out (`PLAY_STORE=true`) |
 | Updates | in-app check → download | Google Play |
+
+## Listing copy (final)
+
+**Short description** (76/80 chars):
+
+> Alarms that follow your shift rotation. Panama, DuPont, 2-2-3, or your own.
+
+**Full description**: see `deploy/store-assets/full_description.txt` — paste
+as-is into the console.

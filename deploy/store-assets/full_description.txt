@@ -1,0 +1,22 @@
+Every clock app can wake you up Monday to Friday. Almost none of them can handle 4 on, 2 off, 3 on, 3 off — so you end up re-doing your alarms every single week, or leaving fifteen half-wrong ones on and hoping you toggle the right ones before bed.
+
+xalarm was built to fix exactly that.
+
+Set your rotation once and you're done. Pick a built-in pattern — Panama (2-2-3), DuPont, Pitman, 4-on/4-off, Southern Swing — or tap out your own cycle on a day grid, anywhere from 2 to 42 days. Tell it which date is day 1 of your rotation and the app works out the rest, forever. The alarm list always shows exactly when the next one fires, so you can check tonight's situation at a glance.
+
+It handles the messy details real schedules have:
+
+- Different start times on different days of the same rotation. Days at 6am, nights at 6pm, a later start on your first day back — whatever your hitch looks like.
+- Alarms that begin on a certain date, stop on a certain date, or ring a set number of times and then shut off. Covering someone for a week? Set it once, it stops on its own.
+- Every 12 hours from a start time. Every third day. The third Tuesday of the month. If your schedule can describe it, the alarm can follow it.
+- A home screen widget with your next alarm and the coming week of your rotation — filled squares are work days, so you can answer "am I on Saturday?" without opening anything.
+
+The everyday stuff is all here too, and it works how you'd expect: a world clock that knows real cities (San Antonio and Dallas, not just zone names), a stopwatch that keeps counting even if you restart your phone, a timer you can start with a tap on the dial, plus per-alarm ringtones with your own sound files and a hold-to-pick snooze (5, 10, 30, or type your own).
+
+There's also a zen focus timer: an hourglass with actual falling sand. Flip your phone over and the sand runs backward to give yourself more time. Set it on its side and it pauses, like a real hourglass would. When the glass empties, you get a gentle buzz and a nudge to stand up and move around.
+
+And if you and a partner want the same countdown — timing something together from two places — you can pair two phones with a short code and share a live timer and stopwatch either of you can control. The connection is obvious on screen the whole time, and everything about it is erased the moment you disconnect.
+
+No accounts. No ads. No tracking. Your alarms and schedules stay on your phone.
+
+Built by a shift worker who got tired of fighting normal alarm apps. If your schedule is the reason you found this page, this was made for you.
