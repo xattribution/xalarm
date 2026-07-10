@@ -9,7 +9,7 @@ Flutter, so one codebase targets Android (primary) and iOS.
 No mainstream alarm app handles rotating / intermittent shift patterns —
 4-on/2-off/3-on/3-off, 2-2-3 Panama, DuPont, mixed 8h and 12h shifts. xalarm
 adds those alongside everything a normal clock app does, with a calm
-black · blue · tan · white design and no "AI" styling.
+black · blue · tan · white design — no neon, no glow, no gradients.
 
 ## What it can schedule
 
