@@ -5,27 +5,17 @@ import 'package:alarm/utils/alarm_set.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/settings/settings_providers.dart';
 import 'core/theme/app_theme.dart';
 import 'features/alarm/application/alarm_providers.dart';
 import 'features/alarm/presentation/ring_screen.dart';
 import 'features/shell/main_shell.dart';
+import 'services/ha_api_server.dart';
 import 'services/permissions_service.dart';
 
 /// Global navigator so the alarm ring stream (which fires outside the widget
 /// tree) can push the full-screen ring UI.
 final navigatorKey = GlobalKey<NavigatorState>();
-
-/// App theme mode. Defaults to dark — the black/blue/tan hero look.
-final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(
-  ThemeModeNotifier.new,
-);
-
-class ThemeModeNotifier extends Notifier<ThemeMode> {
-  @override
-  ThemeMode build() => ThemeMode.dark;
-
-  void set(ThemeMode mode) => state = mode;
-}
 
 class XalarmApp extends ConsumerStatefulWidget {
   const XalarmApp({super.key});
@@ -84,7 +74,11 @@ class _XalarmAppState extends ConsumerState<XalarmApp> {
 
   @override
   Widget build(BuildContext context) {
-    final mode = ref.watch(themeModeProvider);
+    // Keeps the local-network API server aligned with settings.
+    ref.watch(haServerManagerProvider);
+
+    final mode =
+        ref.watch(settingsProvider).value?.themeMode ?? ThemeMode.dark;
     return MaterialApp(
       title: 'xalarm',
       debugShowCheckedModeBanner: false,

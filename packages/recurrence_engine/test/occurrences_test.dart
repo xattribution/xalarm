@@ -235,6 +235,72 @@ void main() {
     });
   });
 
+  group('ShiftCycle — per-day time overrides', () {
+    // 4-day cycle: work, work, work, off. Day 0 starts later (first day
+    // back); day 2 is a night shift.
+    final cycle = ShiftCycle(
+      anchorDate: u(2026, 1, 1),
+      pattern: const [true, true, true, false],
+      times: const [LocalTime(6, 0)],
+      perDayTimes: const {
+        0: [LocalTime(9, 0)],
+        2: [LocalTime(18, 0)],
+      },
+    );
+
+    test('overridden days fire at their own times, others at the default', () {
+      expect(take(cycle, noBounds, u(2026, 1, 1), 6), [
+        u(2026, 1, 1, 9, 0), // day 0 → overridden 09:00
+        u(2026, 1, 2, 6, 0), // day 1 → default 06:00
+        u(2026, 1, 3, 18, 0), // day 2 → overridden 18:00
+        u(2026, 1, 5, 9, 0), // next cycle wraps: day 0 again
+        u(2026, 1, 6, 6, 0),
+        u(2026, 1, 7, 18, 0),
+      ]);
+    });
+
+    test('an override with multiple times fires each of them', () {
+      final doubled = ShiftCycle(
+        anchorDate: u(2026, 1, 1),
+        pattern: const [true, false],
+        times: const [LocalTime(6, 0)],
+        perDayTimes: const {
+          0: [LocalTime(20, 0), LocalTime(8, 0)], // unsorted on purpose
+        },
+      );
+      expect(take(doubled, noBounds, u(2026, 1, 1), 4), [
+        u(2026, 1, 1, 8, 0),
+        u(2026, 1, 1, 20, 0),
+        u(2026, 1, 3, 8, 0),
+        u(2026, 1, 3, 20, 0),
+      ]);
+    });
+
+    test('an empty override list falls back to the default times', () {
+      final empty = ShiftCycle(
+        anchorDate: u(2026, 1, 1),
+        pattern: const [true, false],
+        times: const [LocalTime(6, 0)],
+        perDayTimes: const {0: []},
+      );
+      expect(take(empty, noBounds, u(2026, 1, 1), 2), [
+        u(2026, 1, 1, 6, 0),
+        u(2026, 1, 3, 6, 0),
+      ]);
+    });
+
+    test('survives a JSON round-trip', () {
+      final decoded =
+          RecurrenceRule.fromJson(cycle.toJson()) as ShiftCycle;
+      expect(decoded.perDayTimes[0], [const LocalTime(9, 0)]);
+      expect(decoded.perDayTimes[2], [const LocalTime(18, 0)]);
+      expect(
+        take(decoded, noBounds, u(2026, 1, 1), 3),
+        take(cycle, noBounds, u(2026, 1, 1), 3),
+      );
+    });
+  });
+
   group('Bounds — startDate', () {
     test('nothing fires before the start date', () {
       final mwf = Weekly(weekdays: {1, 3, 5}, time: const LocalTime(7, 0));

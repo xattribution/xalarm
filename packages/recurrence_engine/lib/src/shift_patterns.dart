@@ -22,11 +22,32 @@ class ShiftPattern {
   int get cycleLength => days.length;
   int get workDaysPerCycle => days.where((d) => d).length;
 
-  /// Build a concrete rule from this pattern.
+  /// Build a concrete rule from this pattern. [perDayTimes] optionally
+  /// overrides the start times for specific cycle days (0-based index).
   ShiftCycle toRule({
     required DateTime anchorDate,
     required List<LocalTime> times,
-  }) => ShiftCycle(anchorDate: anchorDate, pattern: days, times: times);
+    Map<int, List<LocalTime>> perDayTimes = const {},
+  }) => ShiftCycle(
+    anchorDate: anchorDate,
+    pattern: days,
+    times: times,
+    perDayTimes: perDayTimes,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'description': description,
+    'days': days,
+  };
+
+  factory ShiftPattern.fromJson(Map<String, dynamic> json) => ShiftPattern(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    description: json['description'] as String? ?? '',
+    days: (json['days'] as List).map((e) => e as bool).toList(),
+  );
 
   /// Expand a list of on/off run-lengths into a day pattern.
   /// e.g. `[4, 2, 3, 3]` (starting on a work run) → 4 on, 2 off, 3 on, 3 off.

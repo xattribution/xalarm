@@ -145,14 +145,20 @@ class MonthlyOrdinal extends RecurrenceRule {
 /// [pattern] is the full cycle expressed as one bool per day (true = work day),
 /// aligned so that index 0 corresponds to [anchorDate]. On work days the alarm
 /// fires at each of [times] (supports 8h vs 12h day/night shift starts).
+///
+/// [perDayTimes] overrides the default [times] for specific cycle days
+/// (key = 0-based day index within the cycle) — e.g. a later start on the
+/// first day back, or night-shift starts on the back half of a rotation.
 class ShiftCycle extends RecurrenceRule {
   final DateTime anchorDate; // day-0 of the pattern (time part ignored)
   final List<bool> pattern; // length = cycle length in days
   final List<LocalTime> times;
+  final Map<int, List<LocalTime>> perDayTimes;
   const ShiftCycle({
     required this.anchorDate,
     required this.pattern,
     required this.times,
+    this.perDayTimes = const {},
   }) : assert(pattern.length > 0);
 
   @override
@@ -161,6 +167,10 @@ class ShiftCycle extends RecurrenceRule {
     'anchorDate': anchorDate.toIso8601String(),
     'pattern': pattern,
     'times': times.map((t) => t.toJson()).toList(),
+    if (perDayTimes.isNotEmpty)
+      'perDayTimes': perDayTimes.map(
+        (day, ts) => MapEntry('$day', ts.map((t) => t.toJson()).toList()),
+      ),
   };
 
   factory ShiftCycle.fromJson(Map<String, dynamic> json) => ShiftCycle(
@@ -169,5 +179,18 @@ class ShiftCycle extends RecurrenceRule {
     times: (json['times'] as List)
         .map((e) => LocalTime.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList(),
+    perDayTimes: json['perDayTimes'] == null
+        ? const {}
+        : (json['perDayTimes'] as Map).map(
+            (day, ts) => MapEntry(
+              int.parse(day as String),
+              (ts as List)
+                  .map(
+                    (e) =>
+                        LocalTime.fromJson(Map<String, dynamic>.from(e as Map)),
+                  )
+                  .toList(),
+            ),
+          ),
   );
 }

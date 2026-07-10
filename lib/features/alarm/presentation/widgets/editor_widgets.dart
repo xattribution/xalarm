@@ -400,9 +400,11 @@ class OrdinalSelector extends StatelessWidget {
 class ShiftPatternSelector extends StatelessWidget {
   const ShiftPatternSelector({
     super.key,
+    required this.patterns,
     required this.selected,
     required this.onChanged,
   });
+  final List<ShiftPattern> patterns;
   final ShiftPattern selected;
   final ValueChanged<ShiftPattern> onChanged;
 
@@ -411,7 +413,7 @@ class ShiftPatternSelector extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Column(
       children: [
-        for (final p in ShiftPatterns.all)
+        for (final p in patterns)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: InkWell(
@@ -577,6 +579,179 @@ class EndModeSelector extends StatelessWidget {
       selected: {mode},
       showSelectedIcon: false,
       onSelectionChanged: (s) => onChanged(s.first),
+    );
+  }
+}
+
+/// Per-cycle-day start-time overrides for shift schedules: "day 3 starts at
+/// 18:00 instead of the default". Keys are 0-based cycle-day indices; the UI
+/// shows them 1-based to match the pattern grid.
+class PerDayTimesEditor extends StatelessWidget {
+  const PerDayTimesEditor({
+    super.key,
+    required this.pattern,
+    required this.overrides,
+    required this.onChanged,
+  });
+  final List<bool> pattern;
+  final Map<int, List<LocalTime>> overrides;
+  final ValueChanged<Map<int, List<LocalTime>>> onChanged;
+
+  Future<LocalTime?> _pickTime(BuildContext context, LocalTime initial) async {
+    final res = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: initial.hour, minute: initial.minute),
+    );
+    return res == null ? null : LocalTime(res.hour, res.minute);
+  }
+
+  void _set(int day, List<LocalTime> times) {
+    final next = Map<int, List<LocalTime>>.of(overrides);
+    next[day] = times;
+    onChanged(next);
+  }
+
+  Future<void> _addOverride(BuildContext context) async {
+    final available = [
+      for (var i = 0; i < pattern.length; i++)
+        if (pattern[i] && !overrides.containsKey(i)) i,
+    ];
+    if (available.isEmpty) return;
+    final day = await showModalBottomSheet<int>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                'Which day starts at a different time?',
+                style: Theme.of(ctx).textTheme.titleMedium,
+              ),
+            ),
+            for (final d in available)
+              ListTile(
+                leading: const Icon(Icons.today_outlined),
+                title: Text('Day ${d + 1} of the cycle'),
+                onTap: () => Navigator.of(ctx).pop(d),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (day == null || !context.mounted) return;
+    final time = await _pickTime(context, const LocalTime(6, 0));
+    if (time != null) _set(day, [time]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final entries = overrides.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    return _Panel(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Different times on certain days'),
+                TextButton.icon(
+                  onPressed: () => _addOverride(context),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add'),
+                ),
+              ],
+            ),
+            if (entries.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'All work days use the default start times.',
+                  style: TextStyle(fontSize: 12.5, color: context.mutedColor),
+                ),
+              ),
+            for (final e in entries)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 64,
+                      child: Text(
+                        'Day ${e.key + 1}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (var i = 0; i < e.value.length; i++)
+                            InputChip(
+                              label: Text(
+                                TimeFormat.clockFromLocal(e.value[i]),
+                              ),
+                              labelStyle: TextStyle(
+                                fontSize: 12.5,
+                                color: scheme.onSurface,
+                              ),
+                              onPressed: () async {
+                                final t = await _pickTime(context, e.value[i]);
+                                if (t == null) return;
+                                final times = List<LocalTime>.of(e.value);
+                                times[i] = t;
+                                times.sort();
+                                _set(e.key, times);
+                              },
+                              onDeleted: e.value.length > 1
+                                  ? () {
+                                      final times = List<LocalTime>.of(e.value)
+                                        ..removeAt(i);
+                                      _set(e.key, times);
+                                    }
+                                  : null,
+                            ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.add_circle_outline,
+                                size: 20),
+                            onPressed: () async {
+                              final t = await _pickTime(
+                                context,
+                                const LocalTime(18, 0),
+                              );
+                              if (t == null) return;
+                              final times = List<LocalTime>.of(e.value)..add(t)
+                                ..sort();
+                              _set(e.key, times);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(Icons.close,
+                          size: 18, color: context.mutedColor),
+                      onPressed: () {
+                        final next = Map<int, List<LocalTime>>.of(overrides)
+                          ..remove(e.key);
+                        onChanged(next);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -95,12 +95,20 @@ XALARM_WEB_PORT=50000 ./update.sh  # custom port (default 49731)
 Then open `http://<server-ip>:49731` from any device on the LAN and download
 `xalarm.apk`. See `update.sh` for all `XALARM_*` overrides.
 
+## Home Assistant
+
+The app can serve a token-authenticated REST API on your LAN so Home Assistant
+can read and control alarms and schedules (next-alarm sensors, toggle
+switches, pre-alarm automations). Enable it in Settings → Home Assistant, then
+follow [docs/home_assistant.md](docs/home_assistant.md).
+
 ## Status
 
-**Milestone 1 (this build):** recurrence engine + full Alarm tab (list, add/edit
-with every rule type and shift presets, bounds, full-screen ring with
-snooze/stop), theming, and the app shell. Engine has 28 passing unit tests
-across three time zones.
+**Done:** recurrence engine (per-day start-time overrides included), full
+Alarm tab, custom shift-schedule builder with saved patterns, World Clock
+(multi-timezone compare), Stopwatch with laps, Timer that rings through the
+native alarm layer, persisted settings/theme, and the Home Assistant local
+API. Engine has 32 passing unit tests across three time zones.
 
-**Next:** World clock (multi-timezone compare), Stopwatch, Timer, iOS
-reliability polish, backup/export of schedules.
+**Next:** iOS reliability polish, backup/export of schedules, per-alarm
+sounds.

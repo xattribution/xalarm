@@ -138,15 +138,25 @@ Iterable<DateTime> _rawAscending(
         }
       }
 
-    case ShiftCycle(:final anchorDate, :final pattern, :final times):
-      final sorted = _sortedTimes(times);
+    case ShiftCycle(
+      :final anchorDate,
+      :final pattern,
+      :final times,
+      :final perDayTimes,
+    ):
+      final defaultTimes = _sortedTimes(times);
+      // Pre-sort overrides once; empty override lists fall back to default.
+      final overrides = <int, List<LocalTime>>{
+        for (final e in perDayTimes.entries)
+          if (e.value.isNotEmpty) e.key: _sortedTimes(e.value),
+      };
       final anchorDay = _dayStart(kindRef, anchorDate);
       var day = _dayStart(kindRef, lowerBound);
       final len = pattern.length;
       for (var i = 0; i < 100000; i++) {
         final idx = _daysBetween(anchorDay, day) % len; // Dart % is non-negative
         if (pattern[idx]) {
-          for (final t in sorted) {
+          for (final t in overrides[idx] ?? defaultTimes) {
             yield _at(kindRef, day, t);
           }
         }

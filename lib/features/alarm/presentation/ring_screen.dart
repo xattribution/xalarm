@@ -4,6 +4,7 @@ import 'package:alarm/alarm.dart' as pkg;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/time/time_format.dart';
 import '../application/alarm_providers.dart';
@@ -95,7 +96,10 @@ class _RingScreenState extends ConsumerState<RingScreen> {
   @override
   Widget build(BuildContext context) {
     final alarm = _alarm;
-    final label = (alarm?.label.isNotEmpty ?? false) ? alarm!.label : 'Alarm';
+    final isTimer = widget.nativeId == kTimerNativeAlarmId;
+    final label = isTimer
+        ? 'Timer'
+        : ((alarm?.label.isNotEmpty ?? false) ? alarm!.label : 'Alarm');
     return PopScope(
       canPop: false,
       child: Scaffold(

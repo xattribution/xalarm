@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:recurrence_engine/recurrence_engine.dart';
 
 import '../../../core/time/time_format.dart';
+import '../../schedules/application/pattern_providers.dart';
 import '../application/alarm_providers.dart';
 import '../domain/alarm.dart';
 import 'widgets/editor_widgets.dart';
@@ -41,6 +42,7 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
   DateTime _anchorDate = _todayDate();
   ShiftPattern _pattern = ShiftPatterns.panama;
   List<LocalTime> _shiftTimes = [const LocalTime(6, 0)];
+  Map<int, List<LocalTime>> _dayOverrides = {};
 
   DateTime? _startDate;
   EndMode _endMode = EndMode.never;
@@ -87,16 +89,25 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
         _mode = RecurrenceMode.monthly;
         _ordinal = ordinal;
         _ordinalWeekday = weekday;
-      case ShiftCycle(:final anchorDate, :final pattern, :final times):
+      case ShiftCycle(
+        :final anchorDate,
+        :final pattern,
+        :final times,
+        :final perDayTimes,
+      ):
         _mode = RecurrenceMode.shift;
         _anchorDate = _dateOnly(anchorDate);
         _shiftTimes = List.of(times);
-        _pattern = ShiftPatterns.all.firstWhere(
+        _dayOverrides = {
+          for (final e in perDayTimes.entries) e.key: List.of(e.value),
+        };
+        final known = ref.read(allPatternsProvider);
+        _pattern = known.firstWhere(
           (p) => _samePattern(p.days, pattern),
           orElse: () => ShiftPattern(
-            id: 'custom',
+            id: 'inline-custom',
             name: 'Custom',
-            description: 'Custom rotation',
+            description: 'Custom rotation from this alarm',
             days: pattern,
           ),
         );
@@ -230,13 +241,35 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
           ),
         ];
       case RecurrenceMode.shift:
+        final patterns = ref.watch(allPatternsProvider);
+        final knownIds = patterns.map((p) => p.id).toSet();
         return [
           ShiftPatternSelector(
+            patterns: [
+              // Keep an inline pattern from an existing alarm selectable even
+              // though it isn't in the saved library.
+              if (!knownIds.contains(_pattern.id)) _pattern,
+              ...patterns,
+            ],
             selected: _pattern,
-            onChanged: (p) => setState(() => _pattern = p),
+            onChanged: (p) => setState(() {
+              _pattern = p;
+              // Drop overrides that fall outside the new cycle length or on
+              // off days.
+              _dayOverrides = {
+                for (final e in _dayOverrides.entries)
+                  if (e.key < p.days.length && p.days[e.key]) e.key: e.value,
+              };
+            }),
           ),
           _anchorRow('Cycle day 1'),
-          _timesEditor(subtitle: 'Shift start times (e.g. day & night)'),
+          _timesEditor(subtitle: 'Default start times (e.g. day & night)'),
+          const SizedBox(height: 8),
+          PerDayTimesEditor(
+            pattern: _pattern.days,
+            overrides: _dayOverrides,
+            onChanged: (next) => setState(() => _dayOverrides = next),
+          ),
         ];
     }
   }
@@ -440,6 +473,13 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
         return _pattern.toRule(
           anchorDate: _anchorDate,
           times: _normalisedTimes(),
+          perDayTimes: {
+            for (final e in _dayOverrides.entries)
+              if (e.key < _pattern.days.length &&
+                  _pattern.days[e.key] &&
+                  e.value.isNotEmpty)
+                e.key: List.of(e.value)..sort(),
+          },
         );
     }
   }
