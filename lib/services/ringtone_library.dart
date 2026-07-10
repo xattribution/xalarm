@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../core/data/json_file.dart';
+
 /// Sentinel value for [Alarm.soundAsset] meaning "use the device's default
 /// alarm sound" (the alarm package plays the system sound when the audio
 /// path is null).
@@ -55,6 +57,10 @@ class RingtoneLibrary {
     if (!await dir.exists()) await dir.create(recursive: true);
     return dir;
   }
+
+  /// Absolute path of the library directory (used as the destination when
+  /// the native side copies a system sound into the library).
+  Future<String> libraryDirPath() async => (await _dir()).path;
 
   Future<List<RingtoneInfo>> userTones() async {
     final dir = await _dir();
@@ -156,3 +162,38 @@ final ringtoneLibraryProvider = Provider<RingtoneLibrary>(
 final userTonesProvider = FutureProvider<List<RingtoneInfo>>(
   (ref) => ref.watch(ringtoneLibraryProvider).userTones(),
 );
+
+/// Favorite sound values (asset paths / file paths / 'system'), persisted so
+/// preferred tones surface at the top of the sound picker.
+final favoriteSoundsProvider =
+    AsyncNotifierProvider<FavoriteSoundsController, Set<String>>(
+      FavoriteSoundsController.new,
+    );
+
+class FavoriteSoundsController extends AsyncNotifier<Set<String>> {
+  final _file = JsonFile('favorite_sounds.json');
+
+  @override
+  Future<Set<String>> build() async {
+    final raw = await _file.read();
+    if (raw is! List) return {};
+    return raw.map((e) => e as String).toSet();
+  }
+
+  bool isFavorite(String path) => (state.value ?? const {}).contains(path);
+
+  Future<void> toggle(String path) async {
+    final next = Set<String>.of(state.value ?? const {});
+    if (!next.remove(path)) next.add(path);
+    state = AsyncData(next);
+    await _file.write(next.toList()..sort());
+  }
+
+  Future<void> removePath(String path) async {
+    final next = Set<String>.of(state.value ?? const {});
+    if (next.remove(path)) {
+      state = AsyncData(next);
+      await _file.write(next.toList()..sort());
+    }
+  }
+}
