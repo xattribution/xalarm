@@ -35,9 +35,8 @@
     text-align: center;
   }
   .logo {
-    font-size: 40px;
-    margin-bottom: 8px;
-    color: var(--tan);
+    display: block;
+    margin: 0 auto 10px;
   }
   h1 {
     font-size: 26px;
@@ -83,7 +82,21 @@
 </head>
 <body>
   <div class="card">
-    <div class="logo">&#9200;</div>
+    <!-- The app icon's hourglass, inlined so the page needs no extra fetch. -->
+    <svg class="logo" width="44" height="44" viewBox="0 0 44 44" fill="none"
+         aria-hidden="true">
+      <rect x="9" y="3" width="26" height="4" rx="2" fill="#8A7350"/>
+      <rect x="9" y="37" width="26" height="4" rx="2" fill="#8A7350"/>
+      <path d="M13.5 7.8h17v3.4c0 4.6-3.8 7.5-6.7 9.6l-1.5 1.2 1.5 1.2
+               c2.9 2.1 6.7 5 6.7 9.6v3.4h-17v-3.4c0-4.6 3.8-7.5 6.7-9.6
+               l1.5-1.2-1.5-1.2c-2.9-2.1-6.7-5-6.7-9.6V7.8z"
+            stroke="#5A6E96" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="M16.8 12.4h10.4c-.5 2.8-2.8 4.6-5.2 6.2-2.4-1.6-4.7-3.4-5.2-6.2z"
+            fill="#CBAE86"/>
+      <rect x="21.55" y="20.5" width="0.9" height="8.5" fill="#CBAE86"/>
+      <path d="M15.6 34.8c1.8-4 4.4-5.9 6.4-6.9 2 1 4.6 2.9 6.4 6.9h-12.8z"
+            fill="#CBAE86"/>
+    </svg>
     <h1>xalarm</h1>
     <p class="tagline">Shift-aware alarms &middot; Panama &amp; rotating schedules</p>
 

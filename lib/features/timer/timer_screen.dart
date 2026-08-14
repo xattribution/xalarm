@@ -287,7 +287,9 @@ class _TimerScreenState extends ConsumerState<TimerScreen> {
                             ? Icons.pause_rounded
                             : Icons.play_arrow_rounded,
                         size: 22,
-                        color: scheme.onSurface.withValues(alpha: 0.35),
+                        // 0.5 keeps the hint subordinate to the digits while
+                        // clearing the 3:1 non-text contrast floor.
+                        color: scheme.onSurface.withValues(alpha: 0.5),
                       ),
                     ],
                   ),
