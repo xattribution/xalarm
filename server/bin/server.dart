@@ -8,33 +8,49 @@ import 'package:xalarm_sync_server/hub.dart';
 
 /// xalarm sync relay. In-memory only — restart wipes everything, which is a
 /// feature: sessions are ephemeral by design.
+///
+/// Environment:
+///   PORT         listen port (default 8080)
+///   GRACE_MS     reconnect window for a dropped member/host (default 15000)
+///   MAX_CLIENTS  registration cap (default 1000)
 void main(List<String> args) async {
-  final port = int.tryParse(Platform.environment['PORT'] ?? '') ?? 8080;
-  final hub = SyncHub();
+  final env = Platform.environment;
+  final port = int.tryParse(env['PORT'] ?? '') ?? 8080;
+  final hub = SyncHub(
+    graceMs: int.tryParse(env['GRACE_MS'] ?? '') ?? 15000,
+    maxClients: int.tryParse(env['MAX_CLIENTS'] ?? '') ?? 1000,
+  );
 
-  final wsHandler = webSocketHandler((WebSocketChannel channel, _) {
-    final socketClient = hub.attach((msg) => channel.sink.add(msg.encode()));
-    channel.stream.listen(
-      (raw) {
-        if (raw is String) {
-          hub.onMessage(hub.effective(socketClient), raw);
-        }
-      },
-      onDone: () => hub.onDisconnect(hub.effective(socketClient)),
-      onError: (_) => hub.onDisconnect(hub.effective(socketClient)),
-      cancelOnError: true,
-    );
-  });
+  final wsHandler = webSocketHandler(
+    (WebSocketChannel channel, _) {
+      final socketClient = hub.attach(
+        (msg) => channel.sink.add(msg.encode()),
+        () => channel.sink.close(),
+      );
+      channel.stream.listen(
+        (raw) {
+          if (raw is String) {
+            hub.onMessage(hub.effective(socketClient), raw);
+          } else {
+            // Binary frames are never part of the protocol.
+            channel.sink.close();
+          }
+        },
+        onDone: () => hub.onDisconnect(hub.effective(socketClient)),
+        onError: (_) => hub.onDisconnect(hub.effective(socketClient)),
+        cancelOnError: true,
+      );
+    },
+    // Protocol-level pings drop dead peers even when the app's own pings stop.
+    pingInterval: const Duration(seconds: 30),
+  );
 
   Response handler(Request req) {
     switch (req.url.path) {
       case 'health':
         return Response.ok('ok');
       case '':
-        return Response.ok(
-          'xalarm sync relay — connect via /ws '
-          '(${hub.registeredCount} registered)',
-        );
+        return Response.ok('xalarm sync relay — connect via /ws');
       default:
         return Response.notFound('not found');
     }

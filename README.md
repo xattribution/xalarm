@@ -69,9 +69,11 @@ Requires the Flutter SDK and, for Android, the Android SDK.
 flutter pub get
 flutter run                 # on an Android device/emulator
 
-# Tests
+# Tests (also run by CI on every push — see .github/workflows/ci.yml)
 dart test packages/recurrence_engine     # the engine (fast, no Flutter)
-flutter test                              # app widget tests
+dart test packages/sync_protocol         # wire codec + QR links
+(cd server && dart test)                 # relay, end to end over real sockets
+flutter test                              # app unit + widget tests
 flutter analyze
 ```
 
@@ -84,8 +86,9 @@ cd packages/recurrence_engine && TZ=America/New_York dart test
 
 ## Self-hosting the APK (local-network test loop)
 
-A Linux server with Docker (+ Compose v2) and git can build and serve the APK
-with one command — Flutter/JDK/Android SDK all live inside the build image:
+A Linux server with Docker (+ Compose v2, BuildKit) and git can build and
+serve the APK with one command — Flutter/JDK/Android SDK all live inside the
+build image:
 
 ```bash
 ./update.sh                        # pull latest source → build APK in Docker → serve
@@ -95,14 +98,19 @@ XALARM_WEB_PORT=50000 ./update.sh  # custom port (default 49731)
 Then open `http://<server-ip>:49731` from any device on the LAN and download
 `xalarm.apk`. See `update.sh` for all `XALARM_*` overrides.
 
-## Time Sync (watch-party timer & stopwatch)
+The first run generates a private signing key in `~/xalarm-keys/` — back it
+up; see [docs/signing.md](docs/signing.md). No signing key is committed to
+this repository.
 
-Pair two phones with jackbox-style codes and share a live timer + stopwatch —
-either side can start/stop and both screens stay in lockstep via a tiny
-self-hosted relay (the `sync` service in docker-compose; in-memory only,
-nothing persisted). Pairing is mutual and explicit, a "Synced with <name>"
-banner shows while connected, and a dropped session must be reconnected by
-both sides within 5 seconds or it's purged. Setup:
+## Time Sync (shared timer & stopwatch)
+
+Get a code, share it as text or a QR, and up to eight phones share a live
+timer + stopwatch through a tiny self-hosted relay (the `sync` service in
+docker-compose; in-memory only, nothing persisted). Whoever's code the
+others join is the **host**: the host lets people in, can lock controls so
+members only watch, and can remove members. A "Synced with …" banner shows
+while connected, and a dropped connection reconnects automatically within
+the grace window (15 s by default). Setup:
 [docs/sync_server.md](docs/sync_server.md).
 
 ## Home Assistant
@@ -118,8 +126,10 @@ follow [docs/home_assistant.md](docs/home_assistant.md).
 Alarm tab, custom shift-schedule builder with saved patterns, World Clock
 (multi-timezone compare), Stopwatch with laps, Timer that rings through the
 native alarm layer, persisted settings/theme, the Home Assistant local API,
-and per-alarm sounds (system default, bundled tones, your own files, or a
-one-time URL download) with hold-to-choose snooze durations. Engine has 32
-passing unit tests across three time zones.
+per-alarm sounds (system default, bundled tones, your own files, or a
+one-time URL download) with hold-to-choose snooze durations, and multi-phone
+Time Sync sessions with host controls and QR joining. Engine has 36 passing
+unit tests across three time zones; every rule is validated before it can
+reach the scheduler.
 
 **Next:** iOS reliability polish, backup/export of schedules.

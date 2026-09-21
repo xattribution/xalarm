@@ -40,7 +40,7 @@ class EndsOnDate extends EndCondition {
 /// when paired with a daily rule (count = 7).
 class EndsAfterCount extends EndCondition {
   final int count; // >= 1
-  const EndsAfterCount(this.count) : assert(count >= 1);
+  const EndsAfterCount(this.count);
   @override
   Map<String, dynamic> toJson() => {'type': 'afterCount', 'count': count};
 }
@@ -53,6 +53,23 @@ class RecurrenceBounds {
   final EndCondition end;
 
   const RecurrenceBounds({this.startDate, this.end = const NeverEnds()});
+
+  /// Null when usable, else a human-readable reason.
+  String? validate() {
+    switch (end) {
+      case NeverEnds():
+        return null;
+      case EndsOnDate(:final date):
+        final s = startDate;
+        if (s != null && date.isBefore(DateTime(s.year, s.month, s.day))) {
+          return 'end date is before the start date';
+        }
+        return null;
+      case EndsAfterCount(:final count):
+        if (count < 1 || count > 10000) return 'count must be 1-10000';
+        return null;
+    }
+  }
 
   Map<String, dynamic> toJson() => {
     'startDate': startDate?.toIso8601String(),

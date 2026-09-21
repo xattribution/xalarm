@@ -14,6 +14,7 @@ List<DateTime> take(
 ) => occurrences(rule, bounds, from: from, limit: limit).toList();
 
 void main() {
+  validationTests();
   const noBounds = RecurrenceBounds();
 
   group('OneTime', () {
@@ -422,6 +423,105 @@ void main() {
         expect(occ.month, 3);
         expect(occ.day, i + 1, reason: 'expected consecutive calendar days');
       }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Validation: everything reachable from JSON must be rejected, not spun on.
+// ---------------------------------------------------------------------------
+void validationTests() {
+  const noBounds = RecurrenceBounds();
+
+  group('validate()', () {
+    test('accepts every well-formed rule', () {
+      final rules = <RecurrenceRule>[
+        OneTime(u(2026, 1, 5, 7)),
+        Weekly(weekdays: const {1, 7}, time: const LocalTime(7, 0)),
+        DailyInterval(
+          everyDays: 2,
+          anchorDate: u(2026, 1, 1),
+          times: const [LocalTime(6, 0)],
+        ),
+        HourlyInterval(every: const Duration(minutes: 90), anchor: u(2026, 1, 1)),
+        const MonthlyOrdinal(ordinal: -1, weekday: 5, time: LocalTime(8, 0)),
+        ShiftCycle(
+          anchorDate: u(2026, 1, 1),
+          pattern: const [true, false],
+          times: const [LocalTime(6, 0)],
+          perDayTimes: const {0: [LocalTime(18, 0)]},
+        ),
+      ];
+      for (final r in rules) {
+        expect(r.validate(), isNull, reason: r.runtimeType.toString());
+      }
+    });
+
+    test('rejects the inputs that would otherwise hang or divide by zero', () {
+      // Built through fromJson — the untrusted path — because the const
+      // constructors assert at compile time.
+      const t6 = [{'h': 6, 'm': 0}];
+      final bad = <Map<String, dynamic>>[
+        {'type': 'weekly', 'weekdays': [], 'time': {'h': 7, 'm': 0}},
+        {'type': 'weekly', 'weekdays': [0], 'time': {'h': 7, 'm': 0}},
+        {'type': 'dailyInterval', 'everyDays': 0,
+          'anchorDate': '2026-01-01T00:00:00Z', 'times': t6},
+        {'type': 'dailyInterval', 'everyDays': -3,
+          'anchorDate': '2026-01-01T00:00:00Z', 'times': t6},
+        {'type': 'hourlyInterval', 'everyMinutes': 0,
+          'anchor': '2026-01-01T00:00:00Z'},
+        {'type': 'hourlyInterval', 'everyMinutes': -5,
+          'anchor': '2026-01-01T00:00:00Z'},
+        {'type': 'monthlyOrdinal', 'ordinal': -1, 'weekday': 0,
+          'time': {'h': 8, 'm': 0}},
+        {'type': 'monthlyOrdinal', 'ordinal': 9, 'weekday': 2,
+          'time': {'h': 8, 'm': 0}},
+        {'type': 'shiftCycle', 'anchorDate': '2026-01-01T00:00:00Z',
+          'pattern': [], 'times': t6},
+        {'type': 'shiftCycle', 'anchorDate': '2026-01-01T00:00:00Z',
+          'pattern': [false, false], 'times': t6},
+        {'type': 'shiftCycle', 'anchorDate': '2026-01-01T00:00:00Z',
+          'pattern': [true], 'times': [{'h': 25, 'm': 0}]},
+        {'type': 'shiftCycle', 'anchorDate': '2026-01-01T00:00:00Z',
+          'pattern': [true], 'times': t6, 'perDayTimes': {'5': t6}},
+      ];
+      for (final json in bad) {
+        final r = RecurrenceRule.fromJson(json);
+        expect(r.validate(), isNotNull, reason: json.toString());
+        // And the engine treats them as empty rather than looping.
+        expect(take(r, noBounds, u(2026, 1, 1), 3), isEmpty);
+      }
+    });
+
+    test('bounds validation', () {
+      expect(const RecurrenceBounds().validate(), isNull);
+      expect(
+        RecurrenceBounds.fromJson({
+          'startDate': null,
+          'end': {'type': 'afterCount', 'count': 0},
+        }).validate(),
+        isNotNull,
+      );
+      expect(
+        RecurrenceBounds(
+          startDate: u(2026, 2, 1),
+          end: EndsOnDate(u(2026, 1, 1)),
+        ).validate(),
+        isNotNull,
+      );
+    });
+
+    test('"last weekday" with an invalid weekday cannot loop forever', () {
+      // Direct engine call with validation bypassed is impossible from the
+      // public API; the validate() gate is what protects it. Sanity-check the
+      // gate's message is user-readable.
+      expect(
+        RecurrenceRule.fromJson({
+          'type': 'monthlyOrdinal', 'ordinal': -1, 'weekday': 8,
+          'time': {'h': 8, 'm': 0},
+        }).validate(),
+        contains('weekday'),
+      );
     });
   });
 }

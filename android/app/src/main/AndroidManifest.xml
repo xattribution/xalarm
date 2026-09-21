@@ -14,10 +14,13 @@
     <!-- Local-network REST API for the Home Assistant integration. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- No cloud backup: the local-API token and alarm data stay on the
+         device only (see deploy/site/privacy.html). -->
     <application
         android:label="xalarm"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
         <!-- Warns the user if the app is killed while an alarm is scheduled. -->
         <service
             android:name="com.gdelataillade.alarm.services.NotificationOnKillService"
@@ -99,6 +102,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Time Sync session links / QR codes: xalarm://sync?code=… -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="xalarm" android:host="sync"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

@@ -6,11 +6,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:recurrence_engine/recurrence_engine.dart';
 
+import '../core/net/url_policy.dart';
 import '../core/settings/settings_providers.dart';
 import '../features/alarm/application/alarm_providers.dart';
 import '../features/alarm/domain/alarm.dart';
 import '../features/alarm/domain/recurrence_summary.dart';
 import '../features/schedules/application/pattern_providers.dart';
+import 'ringtone_library.dart';
 
 /// Keeps the local-network REST API in sync with settings. Watch this once
 /// from the app root; it starts/stops/restarts the server as settings change.
@@ -43,14 +45,24 @@ final _haServerProvider = Provider<HaApiServer>((ref) {
 ///   DELETE /api/alarms/{id}                delete
 ///   POST   /api/alarms/{id}/enable|disable|toggle
 ///   GET    /api/schedules                  built-in + custom shift patterns
+///
+/// Hardening: only private-network callers are served, the token compare is
+/// constant-time, repeated bad tokens from one address are throttled, bodies
+/// are size-capped, every alarm is validated before it reaches the engine,
+/// and internal errors never leak exception text.
 class HaApiServer {
   HaApiServer(this._ref);
   final Ref _ref;
+
+  static const int maxBodyBytes = 64 * 1024;
+  static const int maxAuthFailures = 10;
+  static const Duration authWindow = Duration(minutes: 1);
 
   HttpServer? _server;
   int? _port;
   String _token = '';
   Future<void> _queue = Future.value();
+  final Map<String, _FailureWindow> _failures = {};
 
   /// Serialise start/stop transitions so rapid settings changes can't race.
   void ensure({
@@ -89,37 +101,36 @@ class HaApiServer {
   Future<void> _safeHandle(HttpRequest req) async {
     try {
       await _handle(req);
-    } catch (e) {
-      debugPrint('xalarm API error: $e');
+    } catch (e, st) {
+      debugPrint('xalarm API error: $e\n$st');
       try {
-        _json(req, HttpStatus.internalServerError, {'error': '$e'});
+        _json(req, HttpStatus.internalServerError, {'error': 'internal error'});
       } catch (_) {}
     }
   }
 
   Future<void> _handle(HttpRequest req) async {
-    final res = req.response;
-    res.headers.set('Access-Control-Allow-Origin', '*');
-    res.headers.set(
-      'Access-Control-Allow-Methods',
-      'GET, POST, PUT, DELETE, OPTIONS',
-    );
-    res.headers.set(
-      'Access-Control-Allow-Headers',
-      'Authorization, Content-Type',
-    );
+    final remote = req.connectionInfo?.remoteAddress;
+    if (remote == null || !UrlPolicy.isPrivateAddress(remote)) {
+      // Never answer anything — not even a 401 — off the local network.
+      _json(req, HttpStatus.forbidden, {'error': 'local network only'});
+      return;
+    }
+    final client = remote.address;
 
-    if (req.method == 'OPTIONS') {
-      res.statusCode = HttpStatus.noContent;
-      await res.close();
+    if (_isThrottled(client)) {
+      req.response.headers.set(HttpHeaders.retryAfterHeader, '60');
+      _json(req, HttpStatus.tooManyRequests, {'error': 'too many bad tokens'});
       return;
     }
 
-    final auth = req.headers.value('authorization') ?? '';
-    if (_token.isEmpty || auth != 'Bearer $_token') {
+    final auth = req.headers.value(HttpHeaders.authorizationHeader) ?? '';
+    if (_token.isEmpty || !_constantTimeEquals(auth, 'Bearer $_token')) {
+      _recordFailure(client);
       _json(req, HttpStatus.unauthorized, {'error': 'invalid token'});
       return;
     }
+    _failures.remove(client);
 
     final parts = req.uri.pathSegments; // e.g. [api, alarms, 3, toggle]
     if (parts.isEmpty || parts.first != 'api') {
@@ -155,20 +166,48 @@ class HaApiServer {
     _json(req, HttpStatus.notFound, {'error': 'not found'});
   }
 
+  // --- auth helpers ---
+
+  static bool _constantTimeEquals(String a, String b) {
+    final ua = a.codeUnits;
+    final ub = b.codeUnits;
+    var diff = ua.length ^ ub.length;
+    final n = ua.length < ub.length ? ua.length : ub.length;
+    for (var i = 0; i < n; i++) {
+      diff |= ua[i] ^ ub[i];
+    }
+    return diff == 0;
+  }
+
+  bool _isThrottled(String client) {
+    final w = _failures[client];
+    if (w == null) return false;
+    if (DateTime.now().difference(w.start) > authWindow) {
+      _failures.remove(client);
+      return false;
+    }
+    return w.count >= maxAuthFailures;
+  }
+
+  void _recordFailure(String client) {
+    final now = DateTime.now();
+    final w = _failures[client];
+    if (w == null || now.difference(w.start) > authWindow) {
+      _failures[client] = _FailureWindow(now);
+    } else {
+      w.count++;
+    }
+    // Keep the table bounded even under a scan.
+    if (_failures.length > 256) {
+      _failures.remove(_failures.keys.first);
+    }
+  }
+
   // --- handlers ---
 
   Future<void> _status(HttpRequest req) async {
     final alarms = await _ref.read(alarmListProvider.future);
-    final now = DateTime.now();
-    DateTime? next;
-    Alarm? nextAlarm;
-    for (final a in alarms) {
-      final f = a.nextFire(from: now);
-      if (f != null && (next == null || f.isBefore(next))) {
-        next = f;
-        nextAlarm = a;
-      }
-    }
+    final next = Alarm.nextAcross(alarms);
     _json(req, HttpStatus.ok, {
       'app': 'xalarm',
       'alarmCount': alarms.length,
@@ -176,9 +215,9 @@ class HaApiServer {
       'nextAlarm': next == null
           ? null
           : {
-              'id': nextAlarm!.id,
-              'label': nextAlarm.label,
-              'at': next.toIso8601String(),
+              'id': next.alarm.id,
+              'label': next.alarm.label,
+              'at': next.at.toIso8601String(),
             },
     });
   }
@@ -211,18 +250,42 @@ class HaApiServer {
     _json(req, HttpStatus.ok, _alarmJson(alarm));
   }
 
-  Future<void> _createAlarm(HttpRequest req) async {
+  /// Decodes + validates an alarm body. Returns null after replying 4xx.
+  Future<Alarm?> _parseAlarm(
+    HttpRequest req,
+    Map<String, dynamic> base,
+    int id,
+  ) async {
     final body = await _readBody(req);
     if (body == null) {
       _json(req, HttpStatus.badRequest, {'error': 'invalid JSON body'});
-      return;
+      return null;
     }
+    final Alarm alarm;
     try {
-      final alarm = Alarm.fromJson({...body, 'id': 0});
-      final created =
-          await _ref.read(alarmListProvider.notifier).add(alarm);
-      _json(req, HttpStatus.created, _alarmJson(created));
+      alarm = Alarm.fromJson({...base, ...body, 'id': id});
     } catch (e) {
+      _json(req, HttpStatus.badRequest, {'error': 'bad alarm: $e'});
+      return null;
+    }
+    final problem = alarm.validate() ??
+        await _ref.read(ringtoneLibraryProvider).validateSoundValue(
+          alarm.soundAsset,
+        );
+    if (problem != null) {
+      _json(req, HttpStatus.badRequest, {'error': 'bad alarm: $problem'});
+      return null;
+    }
+    return alarm;
+  }
+
+  Future<void> _createAlarm(HttpRequest req) async {
+    final alarm = await _parseAlarm(req, const {}, 0);
+    if (alarm == null) return;
+    try {
+      final created = await _ref.read(alarmListProvider.notifier).add(alarm);
+      _json(req, HttpStatus.created, _alarmJson(created));
+    } on InvalidAlarmException catch (e) {
       _json(req, HttpStatus.badRequest, {'error': 'bad alarm: $e'});
     }
   }
@@ -233,16 +296,12 @@ class HaApiServer {
       _json(req, HttpStatus.notFound, {'error': 'no alarm $id'});
       return;
     }
-    final body = await _readBody(req);
-    if (body == null) {
-      _json(req, HttpStatus.badRequest, {'error': 'invalid JSON body'});
-      return;
-    }
+    final merged = await _parseAlarm(req, existing.toJson(), id);
+    if (merged == null) return;
     try {
-      final merged = Alarm.fromJson({...existing.toJson(), ...body, 'id': id});
       await _ref.read(alarmListProvider.notifier).updateAlarm(merged);
-      _json(req, HttpStatus.ok, _alarmJson(merged));
-    } catch (e) {
+      _json(req, HttpStatus.ok, _alarmJson((await _find(id)) ?? merged));
+    } on InvalidAlarmException catch (e) {
       _json(req, HttpStatus.badRequest, {'error': 'bad alarm: $e'});
     }
   }
@@ -275,7 +334,7 @@ class HaApiServer {
     }
     await _ref.read(alarmListProvider.notifier).setEnabled(id, enabled);
     final updated = await _find(id);
-    _json(req, HttpStatus.ok, _alarmJson(updated!));
+    _json(req, HttpStatus.ok, _alarmJson(updated ?? existing));
   }
 
   // --- helpers ---
@@ -288,9 +347,16 @@ class HaApiServer {
     return null;
   }
 
+  /// Reads a JSON object body, refusing anything over [maxBodyBytes].
   Future<Map<String, dynamic>?> _readBody(HttpRequest req) async {
     try {
-      final raw = await utf8.decodeStream(req);
+      if (req.contentLength > maxBodyBytes) return null;
+      final bytes = <int>[];
+      await for (final chunk in req) {
+        bytes.addAll(chunk);
+        if (bytes.length > maxBodyBytes) return null;
+      }
+      final raw = utf8.decode(bytes);
       if (raw.trim().isEmpty) return {};
       final decoded = jsonDecode(raw);
       return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
@@ -303,7 +369,14 @@ class HaApiServer {
     final res = req.response;
     res.statusCode = status;
     res.headers.contentType = ContentType.json;
+    res.headers.set('Cache-Control', 'no-store');
     res.write(jsonEncode(body));
     res.close();
   }
+}
+
+class _FailureWindow {
+  _FailureWindow(this.start);
+  final DateTime start;
+  int count = 1;
 }

@@ -195,6 +195,8 @@ class _StopwatchScreenState extends ConsumerState<StopwatchScreen> {
     final scheme = Theme.of(context).colorScheme;
     final elapsed = _elapsed;
     final hasTime = elapsed > Duration.zero;
+    final sync = ref.watch(syncProvider);
+    final locked = sync.isPaired && !sync.canControl;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -216,7 +218,7 @@ class _StopwatchScreenState extends ConsumerState<StopwatchScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               OutlinedButton(
-                onPressed: hasTime || _running ? _lapOrReset : null,
+                onPressed: (hasTime || _running) && !locked ? _lapOrReset : null,
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(120, 52),
                   shape: RoundedRectangleBorder(
@@ -227,7 +229,7 @@ class _StopwatchScreenState extends ConsumerState<StopwatchScreen> {
               ),
               const SizedBox(width: 20),
               FilledButton(
-                onPressed: _startPause,
+                onPressed: locked ? null : _startPause,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(120, 52),
                   backgroundColor:
@@ -242,6 +244,13 @@ class _StopwatchScreenState extends ConsumerState<StopwatchScreen> {
               ),
             ],
           ),
+          if (locked) ...[
+            const SizedBox(height: 10),
+            Text(
+              sync.interrupted ? 'Waiting for the host…' : 'View only',
+              style: TextStyle(color: context.mutedColor, fontSize: 12.5),
+            ),
+          ],
           const SizedBox(height: 24),
           Expanded(
             flex: 2,

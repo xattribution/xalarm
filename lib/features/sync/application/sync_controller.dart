@@ -5,87 +5,137 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sync_protocol/sync_protocol.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../../../core/net/url_policy.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/settings/settings_providers.dart';
 
 enum SyncPhase {
   idle,
   connecting,
-  registered, // have a code, waiting to pair
-  outgoing, // sent a pair request
-  incoming, // received a pair request
-  paired,
-  limbo, // peer lost — 5s reconnect window
+  registered, // have a code; can host or join
+  outgoing, // asked to join someone, waiting for the host
+  paired, // in a session
+  limbo, // our own socket dropped — reconnecting within the grace window
+}
+
+/// A join request waiting for the host's decision.
+class JoinRequest {
+  final String name;
+  final String code;
+  const JoinRequest({required this.name, required this.code});
 }
 
 class SyncState {
   final SyncPhase phase;
   final String myName;
   final String myCode;
-  final String peerName;
-  final String peerCode;
-  final String incomingName;
-  final String incomingCode;
-  final DateTime? limboDeadline;
   final String? error;
+
+  /// People asking to join (you are the host, or about to become one).
+  final List<JoinRequest> pendingJoins;
+
+  /// The live session as the relay last described it; null when not in one.
+  final SessionState? session;
+
+  /// While the host (or we) are reconnecting: when the grace window ends.
+  final DateTime? graceDeadline;
+
+  /// A code we were asked to join (QR / link) that hasn't been sent yet.
+  final String? queuedJoinCode;
 
   const SyncState({
     this.phase = SyncPhase.idle,
     this.myName = '',
     this.myCode = '',
-    this.peerName = '',
-    this.peerCode = '',
-    this.incomingName = '',
-    this.incomingCode = '',
-    this.limboDeadline,
     this.error,
+    this.pendingJoins = const [],
+    this.session,
+    this.graceDeadline,
+    this.queuedJoinCode,
   });
 
   SyncState copyWith({
     SyncPhase? phase,
     String? myName,
     String? myCode,
-    String? peerName,
-    String? peerCode,
-    String? incomingName,
-    String? incomingCode,
-    DateTime? limboDeadline,
     String? error,
     bool clearError = false,
-    bool clearLimbo = false,
+    List<JoinRequest>? pendingJoins,
+    SessionState? session,
+    bool clearSession = false,
+    DateTime? graceDeadline,
+    bool clearGrace = false,
+    String? queuedJoinCode,
+    bool clearQueuedJoin = false,
   }) => SyncState(
     phase: phase ?? this.phase,
     myName: myName ?? this.myName,
     myCode: myCode ?? this.myCode,
-    peerName: peerName ?? this.peerName,
-    peerCode: peerCode ?? this.peerCode,
-    incomingName: incomingName ?? this.incomingName,
-    incomingCode: incomingCode ?? this.incomingCode,
-    limboDeadline: clearLimbo ? null : (limboDeadline ?? this.limboDeadline),
     error: clearError ? null : (error ?? this.error),
+    pendingJoins: pendingJoins ?? this.pendingJoins,
+    session: clearSession ? null : (session ?? this.session),
+    graceDeadline: clearGrace ? null : (graceDeadline ?? this.graceDeadline),
+    queuedJoinCode:
+        clearQueuedJoin ? null : (queuedJoinCode ?? this.queuedJoinCode),
   );
 
-  bool get isPaired => phase == SyncPhase.paired;
-  bool get showsBanner => phase == SyncPhase.paired || phase == SyncPhase.limbo;
+  bool get isPaired => phase == SyncPhase.paired || phase == SyncPhase.limbo;
+  bool get isHost => session != null && session!.hostCode == myCode;
+  bool get hostConnected => session?.hostConnected ?? false;
+  bool get membersCanControl => session?.membersCanControl ?? true;
+
+  /// Whether this device may start/pause/reset/lap right now.
+  bool get canControl =>
+      phase == SyncPhase.paired &&
+      hostConnected &&
+      (isHost || membersCanControl);
+
+  /// In a session, but temporarily unable to act (host or we dropped).
+  bool get interrupted =>
+      phase == SyncPhase.limbo || (phase == SyncPhase.paired && !hostConnected);
+
+  bool get viewOnly => isPaired && !isHost && !membersCanControl;
+
+  List<SessionMember> get members => session?.members ?? const [];
+  List<SessionMember> get others =>
+      [for (final m in members) if (m.code != myCode) m];
+  String get hostName => session?.member(session!.hostCode)?.name ?? '';
+
+  /// One-line description for the banner: "Synced with Sam" / "… and 2 more".
+  String get peerSummary {
+    final names = others.map((m) => m.name).toList();
+    if (names.isEmpty) return 'Waiting for others';
+    if (names.length == 1) return 'Synced with ${names.first}';
+    if (names.length == 2) return 'Synced with ${names[0]} and ${names[1]}';
+    return 'Synced with ${names[0]} and ${names.length - 1} more';
+  }
+
+  bool get showsBanner => isPaired;
 }
 
 final syncProvider = NotifierProvider<SyncController, SyncState>(
   SyncController.new,
 );
 
-/// Manages the WebSocket to the relay, the pairing state machine, the clock
+/// Manages the WebSocket to the relay, the session state machine, the clock
 /// offset, and the action fan-out to the stopwatch/timer screens.
 class SyncController extends Notifier<SyncState> {
+  /// Matches the relay's default GRACE_MS; only affects the countdown shown
+  /// while we reconnect (the relay is authoritative).
+  static const int clientGraceMs = 15000;
+
   WebSocketChannel? _channel;
   StreamSubscription? _sub;
   Timer? _pingTimer;
-  Timer? _limboTimer;
+  Timer? _graceTimer;
+  Timer? _retryTimer;
   String _resumeKey = '';
+  String _activeUrl = '';
   final ClockSync clock = ClockSync();
 
   final _actions = StreamController<PeerAction>.broadcast();
 
-  /// Remote actions from the peer; stopwatch/timer screens subscribe.
+  /// Remote actions from the session; stopwatch/timer screens subscribe.
   Stream<PeerAction> get actions => _actions.stream;
 
   @override
@@ -101,26 +151,47 @@ class SyncController extends Notifier<SyncState> {
       clock.toServer(DateTime.now().millisecondsSinceEpoch);
   int toLocalMs(int serverMs) => clock.toLocal(serverMs);
 
+  String get _configuredUrl =>
+      (ref.read(settingsProvider).value ?? const AppSettings()).syncUrl;
+
   // --- connection lifecycle ---
 
-  Future<void> connect(String name) async {
-    if (name.trim().isEmpty) {
+  /// Register with the relay under [name]. With [joinCode] the join request
+  /// is sent as soon as we have a code (QR / link flow). [serverUrl] uses a
+  /// relay other than the configured one for this session only.
+  Future<void> connect(
+    String name, {
+    String? joinCode,
+    String? serverUrl,
+  }) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
       state = state.copyWith(error: 'Pick a name first.');
       return;
     }
-    state = SyncState(phase: SyncPhase.connecting, myName: name.trim());
-    if (!await _openSocket()) return;
-    _send(Hello(name: name.trim()));
+    final url = (serverUrl ?? _configuredUrl).trim();
+    final problem = UrlPolicy.checkWebSocket(url);
+    if (problem != null) {
+      state = state.copyWith(error: problem);
+      return;
+    }
+    _teardownSocket();
+    state = SyncState(
+      phase: SyncPhase.connecting,
+      myName: trimmed,
+      queuedJoinCode: joinCode,
+    );
+    if (!await _openSocket(url)) return;
+    _send(Hello(name: trimmed));
   }
 
-  Future<bool> _openSocket() async {
-    _teardownSocket(keepState: true);
-    final url =
-        (ref.read(settingsProvider).value ?? const AppSettings()).syncUrl;
+  Future<bool> _openSocket(String url) async {
+    _closeSocketOnly();
     try {
       final channel = WebSocketChannel.connect(Uri.parse(url));
       await channel.ready.timeout(const Duration(seconds: 8));
       _channel = channel;
+      _activeUrl = url;
       _sub = channel.stream.listen(
         (raw) {
           if (raw is String) _onMessage(raw);
@@ -133,11 +204,13 @@ class SyncController extends Notifier<SyncState> {
       return true;
     } catch (e) {
       debugPrint('Sync connect failed: $e');
-      state = SyncState(
-        phase: SyncPhase.idle,
-        myName: state.myName,
-        error: 'Could not reach the sync server.',
-      );
+      if (state.phase != SyncPhase.limbo) {
+        state = SyncState(
+          phase: SyncPhase.idle,
+          myName: state.myName,
+          error: 'Could not reach the sync server.',
+        );
+      }
       return false;
     }
   }
@@ -166,81 +239,147 @@ class SyncController extends Notifier<SyncState> {
     _pingTimer?.cancel();
     _sub = null;
     _channel = null;
-    if (state.phase == SyncPhase.paired) {
-      // Our own socket dropped mid-session: same 5s window applies.
-      _enterLimbo(graceMs: 5000, socketDown: true);
-    } else if (state.phase != SyncPhase.idle &&
-        state.phase != SyncPhase.limbo) {
-      state = SyncState(
-        phase: SyncPhase.idle,
-        myName: state.myName,
-        error: 'Connection lost.',
-      );
+    switch (state.phase) {
+      case SyncPhase.paired:
+        _enterLimbo();
+      case SyncPhase.limbo:
+        break; // a reconnect attempt failed; the retry loop continues
+      case SyncPhase.idle:
+        break;
+      case SyncPhase.connecting:
+      case SyncPhase.registered:
+      case SyncPhase.outgoing:
+        state = SyncState(
+          phase: SyncPhase.idle,
+          myName: state.myName,
+          error: 'Connection lost.',
+        );
     }
   }
 
-  void _teardownSocket({bool keepState = false}) {
+  /// Closes the socket without touching session/limbo bookkeeping.
+  void _closeSocketOnly() {
     _pingTimer?.cancel();
-    _limboTimer?.cancel();
     _sub?.cancel();
     _sub = null;
     try {
       _channel?.sink.close();
     } catch (_) {}
     _channel = null;
-    if (!keepState) _resumeKey = '';
+  }
+
+  void _teardownSocket() {
+    _graceTimer?.cancel();
+    _retryTimer?.cancel();
+    _closeSocketOnly();
+    _resumeKey = '';
   }
 
   // --- user actions ---
 
+  /// Ask to join whoever owns [rawCode] (a code or a scanned link).
   Future<void> requestPair(String rawCode) async {
-    final code = PairCodes.normalize(rawCode);
-    if (code == null) {
+    final link = SyncLink.parse(rawCode);
+    if (link == null) {
       state = state.copyWith(error: 'Codes are 6 letters/numbers.');
       return;
     }
-    state = state.copyWith(phase: SyncPhase.outgoing, clearError: true);
-    _send(PairRequest(targetCode: code));
+    if (link.code == state.myCode) {
+      state = state.copyWith(error: 'That is your own code.');
+      return;
+    }
+    if (state.phase != SyncPhase.registered) {
+      state = state.copyWith(queuedJoinCode: link.code);
+      return;
+    }
+    state = state.copyWith(
+      phase: SyncPhase.outgoing,
+      clearError: true,
+      clearQueuedJoin: true,
+    );
+    _send(PairRequest(targetCode: link.code));
   }
 
-  void acceptPair() => _send(const PairAccept());
+  void acceptJoin(String code) {
+    _send(PairAccept(code: code));
+    _dropPending(code);
+  }
 
-  void declinePair() {
-    _send(const PairDecline());
+  void declineJoin(String code) {
+    _send(PairDecline(code: code));
+    _dropPending(code);
+  }
+
+  void _dropPending(String code) {
     state = state.copyWith(
-      phase: SyncPhase.registered,
-      incomingName: '',
-      incomingCode: '',
+      pendingJoins: [for (final j in state.pendingJoins) if (j.code != code) j],
     );
   }
 
-  /// User-initiated disconnect (or leaving the sync flow entirely).
-  void disconnect() {
+  /// Host only: let members drive, or make them watch.
+  void setMembersCanControl(bool allowed) {
+    if (!state.isHost) return;
+    _send(SetPolicy(membersCanControl: allowed));
+  }
+
+  /// Host only.
+  void kick(String code) {
+    if (!state.isHost) return;
+    _send(Kick(code: code));
+  }
+
+  /// Leave the session (a host ends it for everyone) and drop the relay
+  /// connection entirely.
+  void leave() {
     _send(const Bye());
-    if (state.phase == SyncPhase.paired) {
-      // Server puts the session in limbo; we mirror it so the user can
-      // change their mind within the window.
-      _enterLimbo(graceMs: 5000, socketDown: false);
-    } else {
-      _teardownSocket();
-      state = const SyncState();
-    }
+    _teardownSocket();
+    state = SyncState(myName: state.myName);
   }
 
-  /// The reconnect vote during limbo.
-  Future<void> reconnect() async {
-    if (state.phase != SyncPhase.limbo) return;
-    if (_channel == null) {
-      if (!await _openSocket()) return;
-      _send(Resume(resumeKey: _resumeKey));
-    } else {
-      _send(const Resume());
-    }
-  }
+  /// Manual reconnect while in limbo (the automatic retry loop also runs).
+  Future<void> reconnect() => _tryResume();
 
-  /// Publish a local timer/stopwatch action to the peer.
+  /// Publish a local timer/stopwatch action to the session. Silently
+  /// ignored when this device may not control (the UI is disabled then).
   void sendAction(SyncAction action) {
-    if (state.isPaired) _send(ActionMsg(action: action));
+    if (state.canControl) _send(ActionMsg(action: action));
+  }
+
+  // --- limbo (our own socket dropped) ---
+
+  void _enterLimbo() {
+    _graceTimer?.cancel();
+    _retryTimer?.cancel();
+    final deadline =
+        DateTime.now().add(const Duration(milliseconds: clientGraceMs));
+    state = state.copyWith(
+      phase: SyncPhase.limbo,
+      graceDeadline: deadline,
+      clearError: true,
+    );
+    // Backstop: if the relay never answers, give up shortly after the
+    // window the relay itself uses.
+    _graceTimer = Timer(
+      const Duration(milliseconds: clientGraceMs + 3000),
+      () => _endSession('Session ended — could not reconnect.'),
+    );
+    unawaited(_tryResume());
+    _retryTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (state.phase == SyncPhase.limbo && _channel == null) {
+        unawaited(_tryResume());
+      }
+    });
+  }
+
+  Future<void> _tryResume() async {
+    if (state.phase != SyncPhase.limbo || _resumeKey.isEmpty) return;
+    if (_channel == null && !await _openSocket(_activeUrl)) return;
+    _send(Resume(resumeKey: _resumeKey));
+  }
+
+  void _endSession(String message) {
+    _teardownSocket();
+    state = SyncState(myName: state.myName, error: message);
   }
 
   // --- inbound ---
@@ -249,7 +388,7 @@ class SyncController extends Notifier<SyncState> {
     SyncMessage msg;
     try {
       msg = SyncMessage.decode(raw);
-    } catch (_) {
+    } on FormatException {
       return;
     }
 
@@ -261,72 +400,92 @@ class SyncController extends Notifier<SyncState> {
           myCode: code,
           clearError: true,
         );
+        final queued = state.queuedJoinCode;
+        if (queued != null) unawaited(requestPair(queued));
+
       case Pong(:final t0, :final serverTime):
         clock.addSample(
           t0: t0,
           serverTime: serverTime,
           t1: DateTime.now().millisecondsSinceEpoch,
         );
+
       case PairIncoming(:final name, :final code):
+        if (state.pendingJoins.any((j) => j.code == code)) return;
         state = state.copyWith(
-          phase: SyncPhase.incoming,
-          incomingName: name,
-          incomingCode: code,
+          pendingJoins: [
+            ...state.pendingJoins,
+            JoinRequest(name: name, code: code),
+          ],
         );
+
       case PairDeclined():
         state = state.copyWith(
           phase: SyncPhase.registered,
           error: 'They declined.',
         );
-      case Paired(:final peerName, :final peerCode):
-        _limboTimer?.cancel();
+
+      case SessionState():
+        _graceTimer?.cancel();
+        _retryTimer?.cancel();
+        final memberCodes = msg.members.map((m) => m.code).toSet();
         state = state.copyWith(
           phase: SyncPhase.paired,
-          peerName: peerName,
-          peerCode: peerCode,
-          incomingName: '',
-          incomingCode: '',
+          session: msg,
+          pendingJoins: [
+            for (final j in state.pendingJoins)
+              if (!memberCodes.contains(j.code)) j,
+          ],
           clearError: true,
-          clearLimbo: true,
+          clearGrace: msg.hostConnected,
         );
+
       case PeerAction():
         _actions.add(msg);
-      case PeerLost(:final graceMs):
-        _enterLimbo(graceMs: graceMs, socketDown: false);
+
+      case PeerLost(:final isHost, :final graceMs):
+        if (isHost) {
+          state = state.copyWith(
+            graceDeadline:
+                DateTime.now().add(Duration(milliseconds: graceMs)),
+          );
+        }
+
       case Restored():
-        _limboTimer?.cancel();
+        state = state.copyWith(clearGrace: true);
+
+      case Purged(:final reason):
+        _graceTimer?.cancel();
+        _retryTimer?.cancel();
         state = state.copyWith(
-          phase: SyncPhase.paired,
-          clearLimbo: true,
-          clearError: true,
+          phase: SyncPhase.registered,
+          clearSession: true,
+          clearGrace: true,
+          pendingJoins: const [],
+          error: switch (reason) {
+            PurgeReason.hostLeft => 'The host ended the session.',
+            PurgeReason.hostLost => "The host's connection was lost.",
+            PurgeReason.kicked => 'You were removed from the session.',
+            _ => 'Session ended.',
+          },
         );
-      case Purged():
-        _teardownSocket();
-        state = const SyncState(error: 'Session ended.');
-      case ErrorMsg(:final message):
+
+      case ErrorMsg(:final message, :final code):
+        if (code == ErrorCode.noSession) {
+          // Our session expired while we were away.
+          _endSession('Session ended.');
+          return;
+        }
         state = state.copyWith(
           error: message,
-          // A failed pair request drops back to registered.
+          // A failed join request drops back to registered.
           phase: state.phase == SyncPhase.outgoing
               ? SyncPhase.registered
               : null,
         );
+
       default:
         break;
     }
-  }
-
-  void _enterLimbo({required int graceMs, required bool socketDown}) {
-    _limboTimer?.cancel();
-    final deadline = DateTime.now().add(Duration(milliseconds: graceMs));
-    state = state.copyWith(phase: SyncPhase.limbo, limboDeadline: deadline);
-    // Local backstop: if the server's purge doesn't reach us (socket down),
-    // clean up ourselves shortly after the deadline.
-    _limboTimer = Timer(Duration(milliseconds: graceMs + 1500), () {
-      if (state.phase == SyncPhase.limbo) {
-        _teardownSocket();
-        state = const SyncState(error: 'Session ended.');
-      }
-    });
   }
 }

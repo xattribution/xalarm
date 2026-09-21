@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.5.0+7
+version: 1.6.0+8
 
 environment:
   # ^3.12.0 (not .2) so the app builds on any Flutter 3.44.x — the Docker
@@ -59,13 +59,18 @@ dependencies:
 
   # Time zones (world clock + DST-correct display).
   timezone: ^0.11.1
-  flutter_timezone: ^5.1.0
 
-  go_router: ^17.3.0
   intl: ^0.20.3
   file_picker: ^10.3.10 # 11.x ships a mispackaged Android plugin class
   sensors_plus: ^7.1.0
   web_socket_channel: ^3.0.3
+
+  # Time Sync: session QR codes (display + in-app scanning).
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.4.2
+
+  # Real versionName/versionCode at runtime (no hand-copied constant).
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:

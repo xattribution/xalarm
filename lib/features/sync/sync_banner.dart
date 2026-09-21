@@ -16,12 +16,30 @@ class SyncBanner extends ConsumerWidget {
     if (!sync.showsBanner) return const SizedBox.shrink();
 
     final scheme = Theme.of(context).colorScheme;
-    final limbo = sync.phase == SyncPhase.limbo;
+    final interrupted = sync.interrupted;
+    final String title;
+    if (sync.phase == SyncPhase.limbo) {
+      title = 'Reconnecting…';
+    } else if (!sync.hostConnected) {
+      title = 'Host reconnecting — tap for details';
+    } else {
+      title = sync.peerSummary;
+    }
+    final String trailing;
+    if (interrupted) {
+      trailing = '';
+    } else if (sync.isHost) {
+      trailing = sync.membersCanControl ? 'hosting' : 'hosting · locked';
+    } else if (sync.viewOnly) {
+      trailing = 'view only';
+    } else {
+      trailing = 'shared timer & stopwatch';
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
       child: Material(
-        color: limbo
+        color: interrupted
             ? scheme.error.withValues(alpha: 0.14)
             : scheme.primary.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(12),
@@ -35,25 +53,25 @@ class SyncBanner extends ConsumerWidget {
             child: Row(
               children: [
                 Icon(
-                  limbo ? Icons.link_off : Icons.link,
+                  interrupted
+                      ? Icons.link_off
+                      : (sync.viewOnly ? Icons.visibility : Icons.link),
                   size: 18,
-                  color: limbo ? scheme.error : scheme.primary,
+                  color: interrupted ? scheme.error : scheme.primary,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    limbo
-                        ? 'Sync interrupted — tap to reconnect'
-                        : 'Synced with ${sync.peerName}',
+                    title,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: limbo ? scheme.error : scheme.primary,
+                      color: interrupted ? scheme.error : scheme.primary,
                     ),
                   ),
                 ),
                 Text(
-                  limbo ? '' : 'shared timer & stopwatch',
+                  trailing,
                   style: TextStyle(fontSize: 11.5, color: context.mutedColor),
                 ),
               ],

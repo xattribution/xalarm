@@ -7,6 +7,19 @@
 	<!-- Keeps a silent audio session alive so alarms can ring in the
 	     background. iOS restricts true background alarms; this is the standard
 	     third-party workaround (Android is the primary, more-reliable target). -->
+	<key>NSCameraUsageDescription</key>
+	<string>Scan another phone's Time Sync QR code to join its session.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.xattribution.xalarm.sync</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>xalarm</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

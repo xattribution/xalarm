@@ -1,40 +1,34 @@
-import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-
+import '../../../core/data/json_file.dart';
 import '../domain/alarm.dart';
 
 /// Persists the alarm list as a single JSON file in the app documents dir.
-/// Sufficient for v1 — no native database required.
+/// Entries that fail to parse or validate are skipped individually — one
+/// bad record must never wipe the whole list.
 class AlarmStore {
-  static const _fileName = 'alarms.json';
-
-  Future<File> _file() async {
-    final dir = await getApplicationDocumentsDirectory();
-    return File(p.join(dir.path, _fileName));
-  }
+  final _file = JsonFile('alarms.json');
 
   Future<List<Alarm>> load() async {
-    try {
-      final file = await _file();
-      if (!await file.exists()) return [];
-      final raw = await file.readAsString();
-      if (raw.trim().isEmpty) return [];
-      final list = jsonDecode(raw) as List;
-      return list
-          .map((e) => Alarm.fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList();
-    } catch (_) {
-      // Corrupt or unreadable file — start clean rather than crash.
-      return [];
+    final raw = await _file.read();
+    if (raw is! List) return [];
+    final alarms = <Alarm>[];
+    for (final entry in raw) {
+      try {
+        final alarm = Alarm.fromJson(Map<String, dynamic>.from(entry as Map));
+        final problem = alarm.validate();
+        if (problem != null) {
+          debugPrint('AlarmStore: skipping alarm ${alarm.id}: $problem');
+          continue;
+        }
+        alarms.add(alarm);
+      } catch (e) {
+        debugPrint('AlarmStore: skipping unreadable alarm entry: $e');
+      }
     }
+    return alarms;
   }
 
-  Future<void> save(List<Alarm> alarms) async {
-    final file = await _file();
-    final data = alarms.map((a) => a.toJson()).toList();
-    await file.writeAsString(jsonEncode(data));
-  }
+  Future<void> save(List<Alarm> alarms) =>
+      _file.write(alarms.map((a) => a.toJson()).toList());
 }

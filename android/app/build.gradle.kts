@@ -6,15 +6,24 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Play Store upload key: android/key.properties (git-ignored; see
-// docs/play_store.md). When absent, release builds fall back to the
-// committed sideload keystore so the self-hosted download loop keeps
-// working unchanged.
-val keyProperties = Properties().apply {
-    val f = rootProject.file("key.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
-}
-val hasUploadKey = keyProperties.getProperty("storeFile") != null
+// Release signing. Two channels, both keyed from files that are never
+// committed (see docs/signing.md):
+//
+//   android/key.properties       Play Store upload key   (build-play.sh)
+//   android/sideload.properties  self-hosted APK key     (update.sh generates
+//                                                         one on first run)
+//
+// XALARM_SIGNING_PROPERTIES may point at either file explicitly (the Docker
+// build mounts it as a secret). With no key file at all, release builds are
+// signed with the debug key so `flutter build apk` still works for local
+// testing — such builds cannot be installed over a properly signed one.
+fun loadProps(file: File): Properties? =
+    if (file.exists()) Properties().apply { file.inputStream().use { load(it) } } else null
+
+val signingProps: Properties? =
+    System.getenv("XALARM_SIGNING_PROPERTIES")?.let { loadProps(File(it)) }
+        ?: loadProps(rootProject.file("key.properties"))
+        ?: loadProps(rootProject.file("sideload.properties"))
 
 android {
     namespace = "com.xattribution.xalarm"
@@ -30,7 +39,10 @@ android {
 
     defaultConfig {
         // Play Store identity — permanent once the first bundle is uploaded.
-        applicationId = "com.xalarm"
+        // The self-hosted channel is signed with a different key, so the
+        // Docker build gives it its own id (XALARM_APP_ID_SUFFIX=.sideload)
+        // and it can live next to the Play build. Unset = plain com.xalarm.
+        applicationId = "com.xalarm" + (System.getenv("XALARM_APP_ID_SUFFIX") ?: "")
         // Alarm scheduling + notifications need a modern minimum.
         minSdk = maxOf(flutter.minSdkVersion, 23)
         targetSdk = flutter.targetSdkVersion
@@ -39,31 +51,32 @@ android {
     }
 
     signingConfigs {
-        // Committed keystore for the self-hosted/sideload channel: every
-        // Docker build shares one signing identity so updates install over
-        // each other. Not a secret worth protecting at the cost of broken
-        // sideload updates — the Play channel uses the private upload key.
-        create("release") {
-            storeFile = file("xalarm-release.p12")
-            storePassword = "xalarm-release"
-            keyAlias = "xalarm"
-            keyPassword = "xalarm-release"
-            storeType = "PKCS12"
-        }
-        if (hasUploadKey) {
-            create("upload") {
-                storeFile = rootProject.file(keyProperties.getProperty("storeFile"))
-                storePassword = keyProperties.getProperty("storePassword")
-                keyAlias = keyProperties.getProperty("keyAlias")
-                keyPassword = keyProperties.getProperty("keyPassword")
+        if (signingProps != null) {
+            create("release") {
+                val storePath = signingProps.getProperty("storeFile")
+                    ?: error("storeFile missing from signing properties")
+                storeFile = File(storePath).let { f ->
+                    if (f.isAbsolute) f else rootProject.file(storePath)
+                }
+                storePassword = signingProps.getProperty("storePassword")
+                keyAlias = signingProps.getProperty("keyAlias")
+                keyPassword = signingProps.getProperty("keyPassword")
+                signingProps.getProperty("storeType")?.let { storeType = it }
             }
         }
     }
 
     buildTypes {
         release {
-            signingConfig =
-                signingConfigs.getByName(if (hasUploadKey) "upload" else "release")
+            signingConfig = if (signingProps != null) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "xalarm: no signing properties found — release build is " +
+                        "DEBUG-signed (see docs/signing.md)",
+                )
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

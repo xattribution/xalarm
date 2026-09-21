@@ -4,10 +4,65 @@ import 'local_time.dart';
 /// pattern-match and the compiler enforces that every rule type is handled.
 ///
 /// Pure Dart — no Flutter imports — so it is testable with `dart test`.
+/// Constructors do not assert ranges; [validate] is the single gate, so that
+/// debug and release builds treat bad input identically.
 sealed class RecurrenceRule {
   const RecurrenceRule();
 
   Map<String, dynamic> toJson();
+
+  /// Returns null when the rule is usable, or a human-readable reason it is
+  /// not. Constructors only `assert` (stripped from release builds), so every
+  /// untrusted source — JSON files, the local API — must call this before a
+  /// rule reaches the engine.
+  String? validate() {
+    switch (this) {
+      case OneTime():
+        return null;
+      case Weekly(:final weekdays):
+        if (weekdays.isEmpty) return 'weekly rule needs at least one weekday';
+        if (weekdays.any((d) => d < 1 || d > 7)) return 'weekday must be 1-7';
+        return null;
+      case DailyInterval(:final everyDays, :final times):
+        if (everyDays < 1 || everyDays > 366) return 'everyDays must be 1-366';
+        return _validTimes(times);
+      case HourlyInterval(:final every):
+        if (every.inMinutes < 1) return 'interval must be at least 1 minute';
+        if (every > const Duration(days: 366)) return 'interval is too long';
+        return null;
+      case MonthlyOrdinal(:final ordinal, :final weekday, :final time):
+        if (ordinal != -1 && (ordinal < 1 || ordinal > 5)) {
+          return 'ordinal must be 1-5 or -1';
+        }
+        if (weekday < 1 || weekday > 7) return 'weekday must be 1-7';
+        return time.validate();
+      case ShiftCycle(:final pattern, :final times, :final perDayTimes):
+        if (pattern.isEmpty || pattern.length > 366) {
+          return 'pattern must be 1-366 days';
+        }
+        if (!pattern.contains(true)) return 'pattern needs a work day';
+        final t = _validTimes(times);
+        if (t != null) return t;
+        for (final e in perDayTimes.entries) {
+          if (e.key < 0 || e.key >= pattern.length) {
+            return 'override day ${e.key} is outside the cycle';
+          }
+          final o = _validTimes(e.value, allowEmpty: true);
+          if (o != null) return o;
+        }
+        return null;
+    }
+  }
+
+  static String? _validTimes(List<LocalTime> times, {bool allowEmpty = false}) {
+    if (times.isEmpty && !allowEmpty) return 'at least one time is required';
+    if (times.length > 24) return 'too many times per day';
+    for (final t in times) {
+      final err = t.validate();
+      if (err != null) return err;
+    }
+    return null;
+  }
 
   static RecurrenceRule fromJson(Map<String, dynamic> json) {
     switch (json['type'] as String) {
@@ -73,7 +128,7 @@ class DailyInterval extends RecurrenceRule {
     required this.everyDays,
     required this.anchorDate,
     required this.times,
-  }) : assert(everyDays >= 1);
+  });
 
   @override
   Map<String, dynamic> toJson() => {
@@ -122,8 +177,7 @@ class MonthlyOrdinal extends RecurrenceRule {
     required this.ordinal,
     required this.weekday,
     required this.time,
-  }) : assert(ordinal == -1 || (ordinal >= 1 && ordinal <= 5)),
-       assert(weekday >= 1 && weekday <= 7);
+  });
 
   @override
   Map<String, dynamic> toJson() => {
@@ -159,7 +213,7 @@ class ShiftCycle extends RecurrenceRule {
     required this.pattern,
     required this.times,
     this.perDayTimes = const {},
-  }) : assert(pattern.length > 0);
+  });
 
   @override
   Map<String, dynamic> toJson() => {

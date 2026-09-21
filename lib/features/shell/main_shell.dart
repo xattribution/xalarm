@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sync_protocol/sync_protocol.dart';
 
 import '../../services/system_sounds.dart';
 import '../alarm/presentation/alarm_edit_screen.dart';
@@ -50,11 +51,27 @@ class _MainShellState extends ConsumerState<MainShell> {
         setState(() => _index = tab);
       }
     });
+    // Session QR / link, either way the app was reached.
+    bridge.onSyncLink = _openSyncLink;
+    bridge.initialSyncLink().then((link) {
+      if (link != null) _openSyncLink(link);
+    });
+  }
+
+  void _openSyncLink(String raw) {
+    final link = SyncLink.parse(raw);
+    if (link == null || !mounted) return;
+    setState(() => _index = 3); // Timer tab, where the banner lives
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SyncScreen(initialLink: link)),
+    );
   }
 
   @override
   void dispose() {
-    ref.read(systemSoundsProvider).onOpenTab = null;
+    final bridge = ref.read(systemSoundsProvider);
+    bridge.onOpenTab = null;
+    bridge.onSyncLink = null;
     super.dispose();
   }
 

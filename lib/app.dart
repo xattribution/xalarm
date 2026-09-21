@@ -5,6 +5,7 @@ import 'package:alarm/utils/alarm_set.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/build_info.dart';
 import 'core/settings/settings_providers.dart';
 import 'core/theme/app_theme.dart';
 import 'features/alarm/application/alarm_providers.dart';
@@ -29,6 +30,7 @@ class XalarmApp extends ConsumerStatefulWidget {
 class _XalarmAppState extends ConsumerState<XalarmApp> {
   StreamSubscription<AlarmSet>? _ringSub;
   final _shownRinging = <int>{};
+  Set<int> _lastRinging = const {};
 
   @override
   void initState() {
@@ -37,6 +39,7 @@ class _XalarmAppState extends ConsumerState<XalarmApp> {
   }
 
   Future<void> _bootstrap() async {
+    await BuildInfo.load();
     final scheduler = ref.read(alarmSchedulerProvider);
     try {
       await scheduler.init();
@@ -56,6 +59,16 @@ class _XalarmAppState extends ConsumerState<XalarmApp> {
   }
 
   void _onRinging(AlarmSet set) {
+    final current = {for (final a in set.alarms) a.id};
+    // Anything that just stopped ringing — from our Stop button, the
+    // notification's Stop, or a snooze — needs its horizon topped up.
+    for (final stopped in _lastRinging.difference(current)) {
+      unawaited(
+        ref.read(alarmListProvider.notifier).onNativeAlarmStopped(stopped),
+      );
+    }
+    _lastRinging = current;
+
     for (final ringing in set.alarms) {
       if (_shownRinging.contains(ringing.id)) continue;
       _shownRinging.add(ringing.id);
