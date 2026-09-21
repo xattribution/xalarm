@@ -16,6 +16,9 @@ Iterable<DateTime> occurrences(
   required int limit,
 }) sync* {
   if (limit <= 0) return;
+  // Never spin on a rule that slipped past validation (release builds have
+  // no asserts): an invalid rule simply has no occurrences.
+  if (rule.validate() != null || bounds.validate() != null) return;
 
   final end = bounds.end;
   var emitted = 0;
@@ -267,9 +270,12 @@ DateTime? _ordinalWeekdayOfMonth(
   if (ordinal == -1) {
     final lastDay = DateTime.utc(year, month + 1, 0); // day 0 = last of month
     var d = lastDay;
-    while (d.weekday != weekday) {
+    // Bounded: a valid weekday is found within 7 steps; an invalid one
+    // (only possible if validation was bypassed) yields null.
+    for (var i = 0; i < 7 && d.weekday != weekday; i++) {
       d = d.subtract(const Duration(days: 1));
     }
+    if (d.weekday != weekday) return null;
     return ref.isUtc
         ? DateTime.utc(d.year, d.month, d.day)
         : DateTime(d.year, d.month, d.day);

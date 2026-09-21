@@ -5,14 +5,20 @@ services:
       args:
         BUILD_COMMIT: "${BUILD_COMMIT:-dev}"
         BUILD_DATE: "${BUILD_DATE:-unknown}"
+        APP_ID_SUFFIX: "${XALARM_APP_ID_SUFFIX-.sideload}"
+      # The sideload signing key is mounted into the build as a secret;
+      # update.sh creates it under XALARM_KEYS_DIR on first run.
+      secrets:
+        - sideload_props
+        - sideload_jks
     image: xalarm-web
     container_name: xalarm-web
     restart: unless-stopped
     ports:
       - "${XALARM_WEB_PORT:-49731}:80"
 
-  # Time-sync relay (paired timer/stopwatch sessions). In-memory only —
-  # nothing is persisted; restart wipes all sessions by design.
+  # Time-sync relay (session timer/stopwatch). In-memory only — nothing is
+  # persisted; restart wipes all sessions by design.
   sync:
     build:
       context: .
@@ -20,5 +26,14 @@ services:
     image: xalarm-sync
     container_name: xalarm-sync
     restart: unless-stopped
+    environment:
+      GRACE_MS: "${XALARM_SYNC_GRACE_MS:-15000}"
+      MAX_CLIENTS: "${XALARM_SYNC_MAX_CLIENTS:-1000}"
     ports:
       - "${XALARM_SYNC_PORT:-49732}:8080"
+
+secrets:
+  sideload_props:
+    file: "${XALARM_KEYS_DIR:-./xalarm-keys}/sideload.properties"
+  sideload_jks:
+    file: "${XALARM_KEYS_DIR:-./xalarm-keys}/sideload.jks"

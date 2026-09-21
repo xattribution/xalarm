@@ -5,10 +5,9 @@ import 'package:alarm/utils/alarm_set.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/time/time_format.dart';
-import '../../../services/ringtone_library.dart';
+import '../../../services/alarm_scheduler.dart';
 import '../application/alarm_providers.dart';
 import '../domain/alarm.dart';
 
@@ -53,51 +52,32 @@ class _RingScreenState extends ConsumerState<RingScreen> {
     super.dispose();
   }
 
+  bool get _isTimer => AlarmScheduler.isTimerNative(widget.nativeId);
+
   Alarm? get _alarm {
-    final scheduler = ref.read(alarmSchedulerProvider);
-    final baseId = scheduler.baseIdForNative(widget.nativeId);
+    final id = ref.read(alarmSchedulerProvider).alarmIdForNative(widget.nativeId);
+    if (id == null) return null;
     final alarms = ref.read(alarmListProvider).value ?? const [];
     for (final a in alarms) {
-      if (a.id == baseId) return a;
+      if (a.id == id) return a;
     }
     return null;
   }
 
   Future<void> _stop() async {
-    // Capture everything needed BEFORE closing — the widget is disposed
-    // right after, and the horizon top-up runs in the background.
-    final scheduler = ref.read(alarmSchedulerProvider);
-    final alarm = _alarm;
+    // The app-level ringing listener tops the horizon back up (it also
+    // covers the notification's Stop button), so nothing else to do here.
     await pkg.Alarm.stop(widget.nativeId);
     _close();
-    if (alarm != null) {
-      unawaited(scheduler.sync(alarm));
-    }
   }
 
   Future<void> _snooze(int minutes) async {
-    final alarm = _alarm;
-    final when = DateTime.now().add(Duration(minutes: minutes));
-    final sound = alarm?.soundAsset ?? kDefaultSoundAsset;
-    await pkg.Alarm.stop(widget.nativeId);
+    final scheduler = ref.read(alarmSchedulerProvider);
     try {
-      await pkg.Alarm.set(
-        alarmSettings: pkg.AlarmSettings(
-          id: widget.nativeId,
-          dateTime: when,
-          assetAudioPath: sound == kSystemDefaultSound ? null : sound,
-          loopAudio: true,
-          vibrate: alarm?.vibrate ?? true,
-          androidFullScreenIntent: true,
-          volumeSettings: pkg.VolumeSettings.fixed(volume: alarm?.volume ?? 0.8),
-          notificationSettings: pkg.NotificationSettings(
-            title: (alarm?.label.isNotEmpty ?? false)
-                ? alarm!.label
-                : (widget.nativeId == kTimerNativeAlarmId ? 'Timer' : 'Alarm'),
-            body: 'Snoozed until ${TimeFormat.clock(when)}',
-            stopButton: 'Stop',
-          ),
-        ),
+      await scheduler.snooze(
+        alarm: _isTimer ? null : _alarm,
+        minutes: minutes,
+        ringingNativeId: widget.nativeId,
       );
     } catch (e) {
       debugPrint('Snooze scheduling failed: $e');
@@ -198,7 +178,7 @@ class _RingScreenState extends ConsumerState<RingScreen> {
   @override
   Widget build(BuildContext context) {
     final alarm = _alarm;
-    final isTimer = widget.nativeId == kTimerNativeAlarmId;
+    final isTimer = _isTimer;
     final label = isTimer
         ? 'Timer'
         : ((alarm?.label.isNotEmpty ?? false) ? alarm!.label : 'Alarm');

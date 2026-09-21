@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../core/data/json_file.dart';
+import '../core/net/url_policy.dart';
 
 /// Sentinel value for [Alarm.soundAsset] meaning "use the device's default
 /// alarm sound" (the alarm package plays the system sound when the audio
@@ -38,6 +39,27 @@ class RingtoneLibrary {
   static const _audioExtensions = {
     '.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac', '.opus',
   };
+
+  /// Hard cap on a URL download so a bad link can't fill the phone.
+  static const int maxDownloadBytes = 25 * 1024 * 1024;
+
+  static bool isBuiltInAsset(String value) =>
+      builtIn.any((t) => t.path == value && value != kSystemDefaultSound);
+
+  /// True when [value] is a path inside the app's ringtone directory (the
+  /// only file paths an alarm may reference).
+  Future<bool> isLibraryFile(String value) async {
+    if (!p.isAbsolute(value)) return false;
+    final dir = await _dir();
+    return p.isWithin(dir.path, p.normalize(value));
+  }
+
+  /// Null when [value] is an acceptable stored sound value, else a reason.
+  Future<String?> validateSoundValue(String value) async {
+    if (value == kSystemDefaultSound || isBuiltInAsset(value)) return null;
+    if (await isLibraryFile(value)) return null;
+    return 'soundAsset must be "system", a bundled tone, or a library file';
+  }
 
   /// Human-readable name for any stored sound value.
   static String displayName(String soundAsset) {
@@ -96,30 +118,55 @@ class RingtoneLibrary {
   }
 
   /// Download an audio file from a URL into the library (one-time download —
-  /// alarms must ring offline, so we never stream at ring time).
+  /// alarms must ring offline, so we never stream at ring time). HTTPS only
+  /// (cleartext is allowed for LAN hosts), capped at [maxDownloadBytes].
   Future<RingtoneInfo> importUrl(String url) async {
+    final problem = UrlPolicy.checkHttp(url);
+    if (problem != null) throw FormatException(problem);
     final uri = Uri.parse(url.trim());
-    if (!uri.isScheme('http') && !uri.isScheme('https')) {
-      throw const FormatException('URL must start with http:// or https://');
-    }
     var name = p.basename(uri.path);
     if (name.isEmpty || !_audioExtensions.contains(p.extension(name).toLowerCase())) {
       name = 'downloaded-${DateTime.now().millisecondsSinceEpoch}.mp3';
     }
 
-    final client = HttpClient();
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
     try {
       final req = await client.getUrl(uri);
       final res = await req.close();
       if (res.statusCode != 200) {
         throw HttpException('Download failed (HTTP ${res.statusCode})');
       }
+      for (final hop in res.redirects) {
+        // Relative redirects stay on the same (already vetted) origin.
+        if (!hop.location.hasScheme) continue;
+        if (UrlPolicy.checkHttp(hop.location.toString()) != null) {
+          throw const FormatException('Redirected to an insecure URL.');
+        }
+      }
+      if (res.contentLength > maxDownloadBytes) {
+        throw const FormatException('File is larger than 25 MB.');
+      }
       final dir = await _dir();
       final dest = await _uniquePath(dir, name);
-      final sink = File(dest).openWrite();
-      await res.pipe(sink);
       final file = File(dest);
-      if (await file.length() < 128) {
+      final sink = file.openWrite();
+      var received = 0;
+      try {
+        await for (final chunk in res) {
+          received += chunk.length;
+          if (received > maxDownloadBytes) {
+            throw const FormatException('File is larger than 25 MB.');
+          }
+          sink.add(chunk);
+        }
+        await sink.flush();
+      } catch (_) {
+        await sink.close();
+        if (await file.exists()) await file.delete();
+        rethrow;
+      }
+      await sink.close();
+      if (received < 128) {
         await file.delete();
         throw const FormatException('Downloaded file is empty.');
       }

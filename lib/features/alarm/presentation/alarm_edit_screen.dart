@@ -43,6 +43,7 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
   int _ordinal = 1;
   int _ordinalWeekday = 2;
   DateTime _anchorDate = _todayDate();
+  DateTime? _onceDate; // null = today/tomorrow, whichever is next
   ShiftPattern _pattern = ShiftPatterns.panama;
   List<LocalTime> _shiftTimes = [const LocalTime(6, 0)];
   Map<int, List<LocalTime>> _dayOverrides = {};
@@ -75,8 +76,9 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
 
   void _hydrateFrom(Alarm alarm) {
     switch (alarm.rule) {
-      case OneTime():
+      case OneTime(:final dateTime):
         _mode = RecurrenceMode.once;
+        _onceDate = _dateOnly(dateTime);
       case Weekly(:final weekdays):
         _mode = RecurrenceMode.weekly;
         _weekdays = Set.of(weekdays);
@@ -198,10 +200,21 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
     switch (_mode) {
       case RecurrenceMode.once:
         return [
-          InfoRow(
-            'Rings',
-            'Next ${TimeFormat.clockFromLocal(_time)} (today or tomorrow)',
+          PickerRow(
+            label: 'Date',
+            value: _onceDate == null
+                ? 'Next ${TimeFormat.clockFromLocal(_time)}'
+                : _formatDate(_onceDate!),
+            onTap: () async {
+              final picked = await _pickDate(_onceDate ?? _todayDate());
+              if (picked != null) setState(() => _onceDate = picked);
+            },
           ),
+          if (_onceDate != null)
+            TextButton(
+              onPressed: () => setState(() => _onceDate = null),
+              child: const Text('Use the next occurrence instead'),
+            ),
         ];
       case RecurrenceMode.weekly:
         return [
@@ -421,36 +434,47 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
 
   // --- save / delete ---
 
-  void _save() {
+  Future<void> _save() async {
     final rule = _buildRule();
     final bounds = _buildBounds();
     final notifier = ref.read(alarmListProvider.notifier);
     final existing = widget.existing;
-    if (existing == null) {
-      notifier.add(
-        Alarm(
-          id: 0,
-          label: _label,
-          rule: rule,
-          bounds: bounds,
-          snoozeMinutes: _snoozeMinutes,
-          vibrate: _vibrate,
-          soundAsset: _soundAsset,
-        ),
-      );
-    } else {
-      notifier.updateAlarm(
-        existing.copyWith(
-          label: _label,
-          rule: rule,
-          bounds: bounds,
-          snoozeMinutes: _snoozeMinutes,
-          vibrate: _vibrate,
-          soundAsset: _soundAsset,
-        ),
-      );
+    final draft = Alarm(
+      id: existing?.id ?? 0,
+      label: _label.trim(),
+      rule: rule,
+      bounds: bounds,
+      enabled: existing?.enabled ?? true,
+      snoozeMinutes: _snoozeMinutes,
+      vibrate: _vibrate,
+      soundAsset: _soundAsset,
+      volume: existing?.volume ?? 0.8,
+    );
+    final problem = draft.validate();
+    if (problem != null) {
+      _showError(problem);
+      return;
     }
-    Navigator.of(context).pop();
+    if (rule is OneTime && !rule.dateTime.isAfter(DateTime.now())) {
+      _showError('That date and time have already passed.');
+      return;
+    }
+    try {
+      if (existing == null) {
+        await notifier.add(draft);
+      } else {
+        await notifier.updateAlarm(draft);
+      }
+    } catch (e) {
+      _showError('Could not save: $e');
+      return;
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _delete() {
@@ -462,6 +486,7 @@ class _AlarmEditScreenState extends ConsumerState<AlarmEditScreen> {
   RecurrenceRule _buildRule() {
     switch (_mode) {
       case RecurrenceMode.once:
+        if (_onceDate != null) return OneTime(_combine(_onceDate!, _time));
         var dt = _combine(_todayDate(), _time);
         if (!dt.isAfter(DateTime.now())) {
           dt = dt.add(const Duration(days: 1));

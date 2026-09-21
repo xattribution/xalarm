@@ -60,6 +60,9 @@ class MainActivity : FlutterActivity() {
                     result.success(intent?.getIntExtra("xalarm_tab", -1) ?: -1)
                     intent?.removeExtra("xalarm_tab")
                 }
+                "getInitialSyncLink" -> {
+                    result.success(consumeSyncLink(intent))
+                }
                 "syncWidgets" -> {
                     val json = call.argument<String>("json")
                     if (json == null) {
@@ -117,6 +120,22 @@ class MainActivity : FlutterActivity() {
             channel?.invokeMethod("openTab", tab)
             intent.removeExtra("xalarm_tab")
         }
+        // A session link (xalarm://sync?...) opened while running.
+        consumeSyncLink(intent)?.let { channel?.invokeMethod("openSyncLink", it) }
+    }
+
+    /**
+     * Returns the `xalarm://sync` link carried by [intent], once. Only the
+     * app's own scheme is accepted; the Dart side re-validates the payload.
+     */
+    private fun consumeSyncLink(intent: android.content.Intent?): String? {
+        val data = intent?.data ?: return null
+        if (intent.action != android.content.Intent.ACTION_VIEW) return null
+        if (data.scheme != "xalarm" || data.host != "sync") return null
+        val link = data.toString()
+        if (link.length > 2048) return null
+        intent.data = null
+        return link
     }
 
     override fun onPause() {

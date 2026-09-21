@@ -42,7 +42,8 @@
   <h2>Data stored on your device</h2>
   <p>Alarms, shift schedules, world-clock cities, stopwatch/timer state,
   imported alarm sounds, and app settings are stored locally on your device
-  only. Uninstalling the app deletes them.</p>
+  only &mdash; the app opts out of Android cloud backup, so they never leave
+  the phone. Uninstalling the app deletes them.</p>
 
   <h2>Data the app transmits</h2>
   <ul>
@@ -50,9 +51,10 @@
     offline.</li>
     <li><strong>Time Sync (optional):</strong> if you start a sync session,
     the display name you type, a temporary session code, and timer/stopwatch
-    actions (start/stop times) are relayed through the sync server to the one
-    person you explicitly pair with. Sessions are held in the server's memory
-    only, are never written to disk, and are deleted when the session ends.
+    actions (start/stop times) are relayed through the sync server to the
+    people in the session you join or host (up to eight, each let in by the
+    host). Sessions are held in the server's memory only, are never written
+    to disk, and are deleted when the session ends.
     </li>
     <li><strong>Home Assistant API (optional, off by default):</strong> when
     you enable it, the app answers requests on your own local network,
@@ -72,6 +74,8 @@
     alarms reliably at exact times.</li>
     <li><strong>Sensors (accelerometer):</strong> used only on-device for the
     Zen hourglass tilt controls.</li>
+    <li><strong>Camera (only when you tap Scan):</strong> reads a Time Sync
+    QR code from another phone. Nothing is recorded or uploaded.</li>
     <li><strong>Files (when you choose a sound):</strong> only the audio file
     you pick is copied into the app.</li>
   </ul>

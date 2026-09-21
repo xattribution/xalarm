@@ -141,5 +141,14 @@ automation:
 - The token is required on every request; regenerate it from settings if it
   ever leaks. Traffic is plain HTTP on your LAN — don't port-forward it to the
   internet.
-- The API binds to all interfaces on the phone; your router/firewall defines
-  who can reach it.
+- The API only answers callers with a private/loopback address (RFC 1918,
+  link-local, CGNAT, unique-local IPv6). Requests from anywhere else get a
+  403 without even being checked for a token, so a phone on mobile data or
+  a hotspot is not reachable from the internet even if the port were open.
+- Ten wrong tokens from one address in a minute lock that address out for
+  a minute (429). Token comparison is constant-time.
+- Every alarm body is validated before it reaches the scheduler: rule ranges,
+  label length, snooze 1–180 min, volume 0–1, and `soundAsset` must be
+  `system`, a bundled tone, or a file already in the app's ringtone library.
+  Bad input gets a 400 with the reason; bodies over 64 KB are refused.
+- Errors never include internal exception text.

@@ -116,8 +116,13 @@
     fetch('version.json')
       .then(function (r) { return r.json(); })
       .then(function (v) {
-        document.getElementById('meta').innerHTML =
-          'build <b>' + v.commit + '</b> &middot; ' + v.date;
+        var meta = document.getElementById('meta');
+        meta.textContent = '';
+        var b = document.createElement('b');
+        b.textContent = String(v.commit);
+        meta.appendChild(document.createTextNode('build '));
+        meta.appendChild(b);
+        meta.appendChild(document.createTextNode(' \u00b7 ' + String(v.date)));
       })
       .catch(function () {
         document.getElementById('meta').textContent = 'build info unavailable';

@@ -2,9 +2,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../services/ringtone_library.dart';
 import '../../../services/system_sounds.dart';
+import '../application/alarm_providers.dart';
 
 /// Pick an alarm sound: favorites first, then the system default + bundled
 /// tones, the user's own sounds (file / URL imports), and the device's full
@@ -150,6 +152,11 @@ class _SoundPickerScreenState extends ConsumerState<SoundPickerScreen> {
   }
 
   Future<void> _delete(RingtoneInfo tone) async {
+    // Alarms that used this tone fall back to the default so none of them
+    // ends up pointing at a missing file.
+    await ref
+        .read(alarmListProvider.notifier)
+        .replaceSound(tone.path, kDefaultSoundAsset);
     await ref.read(ringtoneLibraryProvider).delete(tone.path);
     await ref.read(favoriteSoundsProvider.notifier).removePath(tone.path);
     ref.invalidate(userTonesProvider);

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sync_protocol/sync_protocol.dart';
 
 import '../../core/constants.dart';
+import '../../core/theme/app_theme.dart';
 import '../sync/application/sync_controller.dart';
 import '../sync/sync_banner.dart';
 import 'zen_screen.dart';
@@ -221,6 +222,10 @@ class _TimerScreenState extends ConsumerState<TimerScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // In a session where we may not control, every control is inert; the
+    // display still follows the host's actions.
+    final sync = ref.watch(syncProvider);
+    final locked = sync.isPaired && !sync.canControl;
     final progress = _idle
         ? 1.0
         : (_selected.inMilliseconds == 0
@@ -252,7 +257,7 @@ class _TimerScreenState extends ConsumerState<TimerScreen> {
           // Tap the ring to start/pause.
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _running ? _pause() : _start(),
+            onTap: locked ? null : () => _running ? _pause() : _start(),
             child: SizedBox(
               width: 240,
               height: 240,
@@ -298,7 +303,12 @@ class _TimerScreenState extends ConsumerState<TimerScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          if (_idle) ...[
+          if (locked)
+            Text(
+              sync.interrupted ? 'Waiting for the host…' : 'View only',
+              style: TextStyle(color: context.mutedColor, fontSize: 12.5),
+            ),
+          if (_idle && !locked) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -342,7 +352,7 @@ class _TimerScreenState extends ConsumerState<TimerScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               OutlinedButton(
-                onPressed: _idle ? null : _reset,
+                onPressed: _idle || locked ? null : _reset,
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(120, 52),
                   shape: RoundedRectangleBorder(
@@ -353,7 +363,7 @@ class _TimerScreenState extends ConsumerState<TimerScreen> {
               ),
               const SizedBox(width: 20),
               FilledButton(
-                onPressed: _running ? _pause : _start,
+                onPressed: locked ? null : (_running ? _pause : _start),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(120, 52),
                   backgroundColor:

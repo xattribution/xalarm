@@ -82,8 +82,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
     if (url != null) {
-      await ref.read(settingsProvider.notifier).setSyncUrl(url);
+      final problem = await ref.read(settingsProvider.notifier).setSyncUrl(url);
+      if (problem != null && mounted) _showError(problem);
     }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _editUpdateUrl(String current) async {
@@ -111,7 +116,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
     if (url != null) {
-      await ref.read(settingsProvider.notifier).setUpdateUrl(url);
+      final problem =
+          await ref.read(settingsProvider.notifier).setUpdateUrl(url);
+      if (problem != null && mounted) {
+        _showError(problem);
+        return;
+      }
       setState(() => _lastCheck = null);
     }
   }

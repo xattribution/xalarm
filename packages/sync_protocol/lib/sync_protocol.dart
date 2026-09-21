@@ -4,4 +4,5 @@ library;
 export 'src/actions.dart';
 export 'src/clock_sync.dart';
 export 'src/codes.dart';
+export 'src/links.dart';
 export 'src/messages.dart';

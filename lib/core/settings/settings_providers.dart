@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/json_file.dart';
+import '../net/url_policy.dart';
 import 'app_settings.dart';
 
 final settingsProvider = AsyncNotifierProvider<SettingsController, AppSettings>(
@@ -48,20 +49,33 @@ class SettingsController extends AsyncNotifier<AppSettings> {
   Future<void> regenerateToken() async =>
       _update((state.value ?? const AppSettings()).copyWith(apiToken: _newToken()));
 
-  Future<void> setSyncUrl(String url) async {
+  /// Empty resets to the default. Returns a reason when [url] is refused
+  /// (wrong scheme, or cleartext to a non-local host); the setting is then
+  /// left unchanged.
+  Future<String?> setSyncUrl(String url) async {
     final trimmed = url.trim();
+    if (trimmed.isNotEmpty) {
+      final problem = UrlPolicy.checkWebSocket(trimmed);
+      if (problem != null) return problem;
+    }
     await _update(
       (state.value ?? const AppSettings())
           .copyWith(syncUrl: trimmed.isEmpty ? kDefaultSyncUrl : trimmed),
     );
+    return null;
   }
 
-  Future<void> setUpdateUrl(String url) async {
+  Future<String?> setUpdateUrl(String url) async {
     final trimmed = url.trim().replaceAll(RegExp(r'/+$'), '');
+    if (trimmed.isNotEmpty) {
+      final problem = UrlPolicy.checkHttp(trimmed);
+      if (problem != null) return problem;
+    }
     await _update(
       (state.value ?? const AppSettings())
           .copyWith(updateUrl: trimmed.isEmpty ? kDefaultUpdateUrl : trimmed),
     );
+    return null;
   }
 
   static String _newToken() {

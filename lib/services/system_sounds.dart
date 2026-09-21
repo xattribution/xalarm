@@ -30,6 +30,9 @@ class SystemSounds {
         case 'openTab':
           final tab = call.arguments;
           if (tab is int && tab >= 0) onOpenTab?.call(tab);
+        case 'openSyncLink':
+          final link = call.arguments;
+          if (link is String) onSyncLink?.call(link);
       }
     });
   }
@@ -41,6 +44,22 @@ class SystemSounds {
   /// Set by the app shell: a home-screen widget was tapped while the app was
   /// already running and wants its tab shown.
   void Function(int tab)? onOpenTab;
+
+  /// Set by the app shell: an `xalarm://sync…` link was opened while the
+  /// app was running (QR scanned with the camera app, tapped link).
+  void Function(String link)? onSyncLink;
+
+  /// The sync link that cold-launched the app, if any (consumed once).
+  Future<String?> initialSyncLink() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return null;
+    try {
+      return await _channel.invokeMethod<String>('getInitialSyncLink');
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
 
   /// Tab requested by the widget that cold-launched the app, or -1.
   Future<int> initialTab() async {

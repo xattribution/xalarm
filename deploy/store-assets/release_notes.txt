@@ -10,6 +10,19 @@ by tilting the phone, home screen widgets, and a live shared timer you
 can pair with one other person. No accounts, no ads, no tracking.
 ----------------------------------------------------------------------
 
+v1.6.0
+- Time Sync now holds up to eight phones. Whoever you join is the host,
+  who can let people in, lock controls so the rest only watch, and remove
+  members. Share a session as a QR code or scan one to join.
+- Fixed snoozed alarms being dropped when the app restarted or the alarm
+  was edited.
+- Fixed one-time and "stop after N times" alarms staying switched on after
+  their last ring.
+- Fixed repeating alarms going quiet after being stopped from the
+  notification many times without opening the app.
+- One-time alarms can now be set for a specific date.
+----------------------------------------------------------------------
+
 Template for future releases (keep the same voice: plain, concrete,
 lead with what shift workers care about, no marketing filler):
 

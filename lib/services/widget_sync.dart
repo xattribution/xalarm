@@ -36,17 +36,8 @@ class WidgetSyncService {
     final zones = await _ref.read(worldClockProvider.future);
     final stopwatch = await JsonFile('stopwatch.json').read();
 
-    // Next alarm across all enabled alarms.
     final now = DateTime.now();
-    DateTime? next;
-    Alarm? nextAlarm;
-    for (final a in alarms) {
-      final f = a.nextFire(from: now);
-      if (f != null && (next == null || f.isBefore(next))) {
-        next = f;
-        nextAlarm = a;
-      }
-    }
+    final next = Alarm.nextAcross(alarms, from: now);
 
     // 7-day shift strip from the first enabled shift alarm.
     List<Map<String, dynamic>>? shiftDays;
@@ -54,7 +45,7 @@ class WidgetSyncService {
     for (final a in alarms) {
       if (!a.enabled) continue;
       final rule = a.rule;
-      if (rule is ShiftCycle) {
+      if (rule is ShiftCycle && rule.pattern.isNotEmpty) {
         shiftDays = _shiftWeek(rule, now);
         shiftLabel = a.label.isEmpty ? 'Shift' : a.label;
         break;
@@ -62,8 +53,8 @@ class WidgetSyncService {
     }
 
     return {
-      'nextAlarmAtMs': next?.millisecondsSinceEpoch,
-      'nextAlarmLabel': nextAlarm?.label ?? '',
+      'nextAlarmAtMs': next?.at.millisecondsSinceEpoch,
+      'nextAlarmLabel': next?.alarm.label ?? '',
       'shiftLabel': shiftLabel,
       'shiftDays': shiftDays,
       'zones': [

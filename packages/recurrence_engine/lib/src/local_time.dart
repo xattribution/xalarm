@@ -6,11 +6,17 @@ class LocalTime implements Comparable<LocalTime> {
   final int hour; // 0..23
   final int minute; // 0..59
 
-  const LocalTime(this.hour, this.minute)
-    : assert(hour >= 0 && hour <= 23),
-      assert(minute >= 0 && minute <= 59);
+  /// Not asserted: values come from JSON too, and a debug-only assert would
+  /// make debug and release behave differently. Use [validate].
+  const LocalTime(this.hour, this.minute);
 
   int get minutesOfDay => hour * 60 + minute;
+
+  /// Null when in range; the constructor's asserts vanish in release builds.
+  String? validate() =>
+      hour < 0 || hour > 23 || minute < 0 || minute > 59
+          ? 'time $hour:$minute is out of range'
+          : null;
 
   @override
   int compareTo(LocalTime other) => minutesOfDay - other.minutesOfDay;
